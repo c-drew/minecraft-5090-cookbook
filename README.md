@@ -12,7 +12,9 @@ It is a personal project. It is not affiliated with Radiance, Voxy, Mojang, Micr
 **September 27 cave follow-up:** rapid turns in torchlit caves reveal transient spotted artifacts
 that the original standing and movement benchmarks did not catch. Camera and shadow improvements
 are included below; they do not eliminate the light-sampling artifacts. A minimum of 144 FPS with
-no visible defects remains a target, not a verified result across gameplay.
+no visible defects remains a target, not a verified result across gameplay. See the
+[cave investigation and optional sampling correction](docs/cave-artifacts.md) for measurements,
+reproduction steps, and the current performance tradeoff.
 
 ## Results
 

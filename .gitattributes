@@ -1,0 +1,3 @@
+# Mail-formatted patches contain blank context lines with a leading space and
+# the standard "-- " signature separator. Check source diffs after applying.
+*.patch -whitespace

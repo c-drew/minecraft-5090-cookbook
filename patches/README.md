@@ -18,6 +18,11 @@ block-light shadow. Sun shadows, reflections, and shadows of other entities rema
 built and exercised in the private cave test instance. Neither is a complete cure for the
 transient spots after rapid turns.
 
+`experimental/cave-counts/` is a separate opt-in series applied after the normal
+MCVR patches with `MCVR_CAVE_COUNTS=1 scripts/build.sh`. It corrects failed-sample
+count retention and requires a matching lighting calibration. See
+[the evidence and limitations](../docs/cave-artifacts.md) before enabling it.
+
 By hand:
 
 ```sh

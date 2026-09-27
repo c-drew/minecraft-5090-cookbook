@@ -1,0 +1,133 @@
+From ecc9640a56b2340a61a695a6f0a70bcab2e2c613 Mon Sep 17 00:00:00 2001
+From: c-drew <101952850+c-drew@users.noreply.github.com>
+Date: Sun, 27 Sep 2026 04:16:53 -0400
+Subject: [PATCH] ReSTIR: retain attempted counts when samples contribute zero
+
+Keep confidence when visibility rejects a sample or RIS has no positive-weight selection. Temporal and spatial reuse include compatible zero-contribution donors in their denominator. Dropping these counts conditioned normalization on bright survivors and amplified transient cave speckles.
+
+This addresses sample-count bookkeeping, not full visibility-aware bias correction. Tested at 1440p output with 64 candidates and recalibrated direct-light strength 32; residual noise and an outdoor performance cost remain documented.
+---
+ .../advanced/common/direct_light_reservoir.glsl  |  3 ++-
+ .../advanced/spatial_reuse/spatial_reuse.comp    | 16 ++++++++++------
+ .../advanced/temporal_reuse/temporal_reuse.comp  |  7 ++++---
+ .../internal/advanced/visibility/visibility.rgen |  7 ++++++-
+ 4 files changed, 22 insertions(+), 11 deletions(-)
+
+diff --git a/src/shader/world/ray_tracing/internal/advanced/common/direct_light_reservoir.glsl b/src/shader/world/ray_tracing/internal/advanced/common/direct_light_reservoir.glsl
+index 51947c4..bed6f45 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/common/direct_light_reservoir.glsl
++++ b/src/shader/world/ray_tracing/internal/advanced/common/direct_light_reservoir.glsl
+@@ -167,7 +167,7 @@ AreaLightReservoir loadAreaLightReservoir(ivec2 pixel) {
+ }
+ 
+ float areaLightReservoirSampleCount(AreaLightReservoir reservoir) {
+-    if (!(reservoir.valid > 0.5)) { return 0.0; }
++    // Zero-contribution candidates still belong in the resampling denominator.
+     return reservoir.confidence;
+ }
+ 
+@@ -487,6 +487,7 @@ AreaLightReservoir areaLightReservoirFromRis(AreaLightRisState ris,
+                                              float normalizationDenominator,
+                                              float outputConfidence) {
+     AreaLightReservoir reservoir = makeEmptyAreaLightReservoir();
++    reservoir.confidence = max(outputConfidence, 0.0);
+     if (!ris.hasSampleOut || !(ris.weightSum > 1e-8) || !(ris.sampleOut.targetFunction > 1e-8) ||
+         !(normalizationDenominator > 1e-8) || !(outputConfidence > 1e-8)) {
+         return reservoir;
+diff --git a/src/shader/world/ray_tracing/internal/advanced/spatial_reuse/spatial_reuse.comp b/src/shader/world/ray_tracing/internal/advanced/spatial_reuse/spatial_reuse.comp
+index 1bc554a..2a9fd40 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/spatial_reuse/spatial_reuse.comp
++++ b/src/shader/world/ray_tracing/internal/advanced/spatial_reuse/spatial_reuse.comp
+@@ -104,12 +104,16 @@ bool tryLoadSpatialReuseReservoirCandidate(ivec2 pixel, out SpatialReuseReservoi
+ 
+     vec4 reservoir0 = loadRestirLightReservoirLayer(pixel, ADV_RESERVOIR_PING_INPUT, 0);
+     unpackAreaLightReservoirValidityConfidence(reservoir0.w, candidate.valid, candidate.confidence);
+-    if (!(candidate.valid > 0.5) || !(candidate.confidence > 1e-8)) { return false; }
++    if (!(candidate.confidence > 1e-8)) { return false; }
++    if (!(candidate.valid > 0.5)) { return true; }
+ 
+     vec4 reservoir2 = loadRestirLightReservoirLayer(pixel, ADV_RESERVOIR_PING_INPUT, 2);
+     candidate.emission = reservoir2.xyz;
+     candidate.contributionWeight = reservoir2.w;
+-    if (!(candidate.contributionWeight > 1e-8)) { return false; }
++    if (!(candidate.contributionWeight > 1e-8)) {
++        candidate.valid = 0.0;
++        return true;
++    }
+ 
+     vec4 reservoir1 = loadRestirLightReservoirLayer(pixel, ADV_RESERVOIR_PING_INPUT, 1);
+     candidate.point = reservoir0.xyz;
+@@ -118,7 +122,7 @@ bool tryLoadSpatialReuseReservoirCandidate(ivec2 pixel, out SpatialReuseReservoi
+ }
+ 
+ float spatialReuseReservoirSampleCount(SpatialReuseReservoirCandidate candidate) {
+-    return candidate.valid > 0.5 ? candidate.confidence : 0.0;
++    return candidate.confidence;
+ }
+ 
+ float evaluateSpatialReuseReservoirTargetAtQuery(SpatialReuseReservoirCandidate candidate,
+@@ -300,15 +304,15 @@ void main() {
+         }
+         if (!(donorMergeCount > 1e-8)) { continue; }
+ 
++        // Count compatible donors even when their selected sample contributes zero.
++        sampleCountSum += donorMergeCount;
+         float target = evaluateSpatialReuseReservoirTargetAtQuery(s, queryQ, cacheQ);
+         if (!(target > 1e-8)) { continue; }
+-
+-        sampleCountSum += donorMergeCount;
+         float w = donorMergeCount * target * s.contributionWeight;
+         spatialReuseRisAddReservoirCandidate(r, p, s, target, w, seed);
+     }
+ 
+-    if (!(sampleCountSum > 1e-8) || !r.hasSampleOut) {
++    if (!(sampleCountSum > 1e-8)) {
+         storeAreaLightReservoir(q, makeEmptyAreaLightReservoir());
+         return;
+     }
+diff --git a/src/shader/world/ray_tracing/internal/advanced/temporal_reuse/temporal_reuse.comp b/src/shader/world/ray_tracing/internal/advanced/temporal_reuse/temporal_reuse.comp
+index 6123bc7..c578429 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/temporal_reuse/temporal_reuse.comp
++++ b/src/shader/world/ray_tracing/internal/advanced/temporal_reuse/temporal_reuse.comp
+@@ -126,7 +126,8 @@ bool tryLoadPreviousFrameReservoir(ivec2 pixel,
+                                          loadRestirLightReservoirLayer(prevPixel, !ADV_RESERVOIR_PING_INPUT, 1),
+                                          loadRestirLightReservoirLayer(prevPixel, !ADV_RESERVOIR_PING_INPUT, 2),
+                                          loadRestirLightReservoirSource(prevPixel, !ADV_RESERVOIR_PING_INPUT));
+-    if (!(reservoir.valid > 0.5) || !areaLightReservoirSourceExists(reservoir)) {
++    if (!(reservoir.confidence > 1e-8) ||
++        (reservoir.valid > 0.5 && !areaLightReservoirSourceExists(reservoir))) {
+         reservoir = makeEmptyAreaLightReservoir();
+         return false;
+     }
+@@ -176,8 +177,8 @@ void main() {
+     float prevTarget = hasPrev ? evaluateReservoirTargetAtQuery(prev, queryQ, cacheQ) : 0.0;
+     float temporalSampleCountCap = max(float(ADV_TEMPORAL_CONFIDENCE_CAP), 0.0);
+     float temporalHistoryCarryCap = max(0.25 * temporalSampleCountCap, 1.0);
+-    float curConfidence = cur.contributionWeight > 1e-8 ? areaLightReservoirSampleCount(cur) : 0.0;
+-    float prevConfidence = prev.contributionWeight > 1e-8 ? areaLightReservoirSampleCount(prev) : 0.0;
++    float curConfidence = areaLightReservoirSampleCount(cur);
++    float prevConfidence = hasPrev ? areaLightReservoirSampleCount(prev) : 0.0;
+     float curMergeCount = curConfidence;
+     float prevMergeCount = min(prevConfidence, temporalHistoryCarryCap);
+     float sampleCountSum = curMergeCount + prevMergeCount;
+diff --git a/src/shader/world/ray_tracing/internal/advanced/visibility/visibility.rgen b/src/shader/world/ray_tracing/internal/advanced/visibility/visibility.rgen
+index c61e31e..b0da192 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/visibility/visibility.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/visibility/visibility.rgen
+@@ -89,7 +89,12 @@ void main() {
+         hasFirstHitFlag(flags, ADV_FIRST_HIT_FLAG_INSIDE_BOAT));
+     float visibility = max(max(transmission.x, transmission.y), transmission.z);
+     if (visibility <= 1e-8) {
+-        storeAreaLightReservoir(pixel, makeEmptyAreaLightReservoir());
++        // Discard the blocked sample, but retain its attempted sample count.
++        // Otherwise reuse conditions on visibility and overweights bright survivors.
++        reservoir.valid = 0.0;
++        reservoir.contributionWeight = 0.0;
++        reservoir.targetFunction = 0.0;
++        storeAreaLightReservoir(pixel, reservoir);
+         return;
+     }
+     storeAreaLightReservoir(pixel, reservoir);
+-- 
+2.55.0
+

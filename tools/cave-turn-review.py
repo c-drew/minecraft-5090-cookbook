@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+"""Review post-turn convergence, using each shot's own settled image as a reference.
+
+This is a transient-image difference proxy, not an absolute quality score.
+Exposure is normalized within each wall crop. Torch, hands and HUD are excluded.
+The motion end is estimated from captured frames, not ffmpeg startup time.
+"""
+import argparse
+import json
+import subprocess
+from pathlib import Path
+
+import numpy as np
+from PIL import Image, ImageDraw, ImageFilter
+
+parser = argparse.ArgumentParser()
+parser.add_argument('directory', type=Path)
+args = parser.parse_args()
+p = args.directory
+events = json.loads((p / 'turn-events.json').read_text())
+raw = subprocess.check_output([
+    'ffmpeg', '-hide_banner', '-loglevel', 'error', '-i', str(p / 'fast-turns.mp4'),
+    '-vf', 'fps=60,scale=640:360', '-pix_fmt', 'gray', '-f', 'rawvideo', '-'])
+frames = np.frombuffer(raw, np.uint8).reshape(-1, 360, 640)
+motion = np.zeros(len(frames))
+for i in range(1, len(frames)):
+    motion[i] = np.mean(np.abs(frames[i, :230].astype(float) - frames[i - 1, :230]))
+
+rows = []
+delays = (0.05, 0.15, 0.3, 0.6, 1.2, 2.3)
+sheet = Image.new('RGB', (len(delays) * 320, len(events) * 265), '#141820')
+draw = ImageDraw.Draw(sheet)
+for i, event in enumerate(events):
+    # Search broadly enough to allow X11/capture latency, but not the next turn.
+    start = max(1, int((event['start'] - 0.4) * 60))
+    stop = min(len(frames), int((event['end'] + 0.8) * 60))
+    candidates = np.flatnonzero(motion[start:stop] > 6.0) + start
+    if not len(candidates):
+        raise RuntimeError(f'No rapid turn detected for event {i}')
+    end = int(candidates[-1])
+    down = event['yaw'] > 0
+    box = (10, 15, 250, 200) if down else (400, 15, 635, 195)
+    x0, y0, x1, y1 = box
+    target_ids = range(end + 120, min(end + 156, len(frames)))
+    target = np.mean(frames[list(target_ids), y0:y1, x0:x1], axis=0)
+    mask = (target > 15) & (target < 225)
+    target_mean = target[mask].mean()
+    samples = []
+    for j, delay in enumerate(delays):
+        n = min(end + round(delay * 60), len(frames) - 1)
+        crop = frames[n, y0:y1, x0:x1].astype(float)
+        gain = target_mean / max(crop[mask].mean(), 1.0)
+        residual = crop * gain - target
+        rms = float(np.sqrt(np.mean(residual[mask] ** 2)))
+        # Report a relative score too: darker images otherwise look artificially
+        # better by the absolute 8-bit error alone.
+        samples.append({'delay_s': delay, 'frame': n, 'rms_8bit': rms,
+                        'rms_relative_to_mean': rms / target_mean, 'gain': gain})
+        im = Image.fromarray(frames[n]).crop(box).resize((320, 235))
+        x, y = j * 320, i * 265
+        sheet.paste(im, (x, y + 30))
+        draw.text((x + 6, y + 8), f'{i + 1} {delay:.2f}s  RMS {rms:.2f}', fill='white')
+    rows.append({'event': event, 'motion_end_frame': end,
+                 'motion_end_video_s': end / 60, 'crop_at_640x360': box,
+                 'settled_mean_8bit': float(target_mean), 'samples': samples})
+result = {'note': __doc__, 'events': rows}
+(p / 'convergence.json').write_text(json.dumps(result, indent=2) + '\n')
+sheet.save(p / 'convergence.png')
+print(json.dumps({'directory': str(p), 'motion_ends': [r['motion_end_video_s'] for r in rows],
+                  'mean_rms_by_delay': {str(d): round(float(np.mean([r['samples'][j]['rms_8bit'] for r in rows])), 3)
+                                        for j, d in enumerate(delays)}}))

@@ -3,6 +3,8 @@
 #
 # Usage: scripts/build.sh [WORK_DIR]        (default: ./work)
 # Output: WORK_DIR/Radiance/build/libs/radiance-*.jar
+# Optional: MCVR_CAVE_COUNTS=1 applies the experimental cave-count correction.
+# Read docs/cave-artifacts.md for its brightness calibration and performance cost.
 #
 # Needs: git, cmake, ninja, a C++20 compiler, JDK 21 (JAVA_HOME), Vulkan headers and shaderc
 # (Arch: vulkan-headers shaderc), network access for the first run (~2 GB of MCVR submodules
@@ -36,6 +38,9 @@ checkout() { # DIR REPO COMMIT PATCH_DIR
 
 checkout "$work/Radiance" "$RADIANCE_REPO" "$RADIANCE_COMMIT" "$root/patches/radiance"
 checkout "$work/MCVR" "$MCVR_REPO" "$MCVR_COMMIT" "$root/patches/mcvr"
+if [[ ${MCVR_CAVE_COUNTS:-0} == 1 ]]; then
+    git -C "$work/MCVR" am -q "$root/patches/experimental/cave-counts/"*.patch
+fi
 git -C "$work/MCVR" submodule update --init --recursive --depth 1
 
 # JNI headers for the engine build.

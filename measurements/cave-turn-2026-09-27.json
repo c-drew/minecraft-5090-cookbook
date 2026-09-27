@@ -1,0 +1,867 @@
+{
+  "date": "2026-09-27",
+  "note": "Private Gamescope capture; convergence compares each crop to its own settled image. See docs/cave-artifacts.md for limits.",
+  "output_size": [
+    2560,
+    1440
+  ],
+  "ray_input_size": [
+    1334,
+    750
+  ],
+  "dlss_runtime": "310.9.1",
+  "rr_preset": 6,
+  "results": [
+    {
+      "scene": "fastturn",
+      "jar_sha256": "a87e14b03c5343953a48540df1659773275d20c3e5c5522045eb2bc4d06a5538",
+      "radiance_overrides": [
+        "maxFps=144",
+        "inactivityFpsLimit=144"
+      ],
+      "pack_overrides": [
+        "initial_samples=16",
+        "player_block_light_shadows=render_pipeline.false"
+      ],
+      "label": "fastturn-baseline",
+      "metrics": {
+        "frames": 1141,
+        "seconds": 7.92341814,
+        "fps": 144.00350705207134,
+        "one_percent_low": 111.39472884193837,
+        "median_ms": 6.93835,
+        "p99_ms": 8.83165
+      },
+      "render_thread_cpu_percent": 37.708493533045186,
+      "gpu_utilization_mean": 70
+    },
+    {
+      "scene": "fastturn",
+      "jar_sha256": "9847db5e95db124218b7c80d5ce3952c1f08111f2750301c2f1cf8598036ab23",
+      "radiance_overrides": [
+        "maxFps=144",
+        "inactivityFpsLimit=144"
+      ],
+      "pack_overrides": [
+        "initial_samples=64",
+        "player_block_light_shadows=render_pipeline.false",
+        "direct_light_strength=32.0"
+      ],
+      "label": "fastturn-count-64",
+      "metrics": {
+        "frames": 1147,
+        "seconds": 7.97150478,
+        "fps": 143.88751329331825,
+        "one_percent_low": 110.94005051806482,
+        "median_ms": 6.93864,
+        "p99_ms": 8.679
+      },
+      "render_thread_cpu_percent": 37.70858492420811,
+      "gpu_utilization_mean": 82.55555555555556
+    },
+    {
+      "scene": "lightingcheck",
+      "jar_sha256": "a87e14b03c5343953a48540df1659773275d20c3e5c5522045eb2bc4d06a5538",
+      "radiance_overrides": [
+        "maxFps=260",
+        "inactivityFpsLimit=260"
+      ],
+      "pack_overrides": [
+        "initial_samples=16",
+        "direct_light_strength=4.0",
+        "player_block_light_shadows=render_pipeline.false"
+      ],
+      "label": "lighting-baseline-walk",
+      "metrics": {
+        "frames": 4299,
+        "seconds": 23.78860866,
+        "fps": 180.7167481479768,
+        "one_percent_low": 135.98092071127346,
+        "median_ms": 5.40886,
+        "p99_ms": 6.61319
+      },
+      "render_thread_cpu_percent": 42.446010664877065,
+      "gpu_utilization_mean": 99
+    },
+    {
+      "scene": "lightingcheck",
+      "jar_sha256": "9847db5e95db124218b7c80d5ce3952c1f08111f2750301c2f1cf8598036ab23",
+      "radiance_overrides": [
+        "maxFps=260",
+        "inactivityFpsLimit=260"
+      ],
+      "pack_overrides": [
+        "initial_samples=64",
+        "direct_light_strength=32.0",
+        "player_block_light_shadows=render_pipeline.false"
+      ],
+      "label": "lighting-fixed-walk",
+      "metrics": {
+        "frames": 3746,
+        "seconds": 23.84608629,
+        "fps": 157.09076761878984,
+        "one_percent_low": 119.82864891838128,
+        "median_ms": 6.204605,
+        "p99_ms": 7.50273
+      },
+      "render_thread_cpu_percent": 37.877684972612904,
+      "gpu_utilization_mean": 99
+    }
+  ],
+  "convergence": {
+    "baseline": {
+      "note": "Review post-turn convergence, using each shot's own settled image as a reference.\n\nThis is a transient-image difference proxy, not an absolute quality score.\nExposure is normalized within each wall crop. Torch, hands and HUD are excluded.\nThe motion end is estimated from captured frames, not ffmpeg startup time.\n",
+      "events": [
+        {
+          "event": {
+            "cycle": 0,
+            "yaw": 180,
+            "pitch": 46,
+            "start": 1.5003295569986221,
+            "end": 1.6355024430013145
+          },
+          "motion_end_frame": 97,
+          "motion_end_video_s": 1.6166666666666667,
+          "crop_at_640x360": [
+            10,
+            15,
+            250,
+            200
+          ],
+          "settled_mean_8bit": 85.59789773415727,
+          "samples": [
+            {
+              "delay_s": 0.05,
+              "frame": 100,
+              "rms_8bit": 10.266572613151322,
+              "rms_relative_to_mean": 0.11993954156486852,
+              "gain": 1.0904943195272483
+            },
+            {
+              "delay_s": 0.15,
+              "frame": 106,
+              "rms_8bit": 6.5051462352310425,
+              "rms_relative_to_mean": 0.07599656542306887,
+              "gain": 1.0462641687270382
+            },
+            {
+              "delay_s": 0.3,
+              "frame": 115,
+              "rms_8bit": 4.269608131978087,
+              "rms_relative_to_mean": 0.04987982468025413,
+              "gain": 1.0262272565497503
+            },
+            {
+              "delay_s": 0.6,
+              "frame": 133,
+              "rms_8bit": 2.65942347110281,
+              "rms_relative_to_mean": 0.031068794228594526,
+              "gain": 1.0139735813200441
+            },
+            {
+              "delay_s": 1.2,
+              "frame": 169,
+              "rms_8bit": 1.2637210776544356,
+              "rms_relative_to_mean": 0.01476345928003038,
+              "gain": 1.0033140606670017
+            },
+            {
+              "delay_s": 2.3,
+              "frame": 235,
+              "rms_8bit": 0.26131271222021546,
+              "rms_relative_to_mean": 0.003052793574811597,
+              "gain": 0.9999944086107959
+            }
+          ]
+        },
+        {
+          "event": {
+            "cycle": 0,
+            "yaw": -180,
+            "pitch": -46,
+            "start": 4.635576882999885,
+            "end": 4.7705962660002115
+          },
+          "motion_end_frame": 286,
+          "motion_end_video_s": 4.766666666666667,
+          "crop_at_640x360": [
+            400,
+            15,
+            635,
+            195
+          ],
+          "settled_mean_8bit": 45.09593058855226,
+          "samples": [
+            {
+              "delay_s": 0.05,
+              "frame": 289,
+              "rms_8bit": 3.650544887437156,
+              "rms_relative_to_mean": 0.08095064986559693,
+              "gain": 1.1034391572442155
+            },
+            {
+              "delay_s": 0.15,
+              "frame": 295,
+              "rms_8bit": 2.6822692375632053,
+              "rms_relative_to_mean": 0.05947918587235248,
+              "gain": 1.0662468692542673
+            },
+            {
+              "delay_s": 0.3,
+              "frame": 304,
+              "rms_8bit": 2.063368342767886,
+              "rms_relative_to_mean": 0.04575508955771895,
+              "gain": 1.0478270309091664
+            },
+            {
+              "delay_s": 0.6,
+              "frame": 322,
+              "rms_8bit": 1.3793896782780832,
+              "rms_relative_to_mean": 0.03058789696266398,
+              "gain": 1.0295029458354323
+            },
+            {
+              "delay_s": 1.2,
+              "frame": 358,
+              "rms_8bit": 0.8025908413160467,
+              "rms_relative_to_mean": 0.017797411669774634,
+              "gain": 1.0103745727963758
+            },
+            {
+              "delay_s": 2.3,
+              "frame": 424,
+              "rms_8bit": 0.18357931836989724,
+              "rms_relative_to_mean": 0.0040708621814425855,
+              "gain": 0.9997913505929064
+            }
+          ]
+        },
+        {
+          "event": {
+            "cycle": 1,
+            "yaw": 180,
+            "pitch": 46,
+            "start": 7.770666301999881,
+            "end": 7.903293794999627
+          },
+          "motion_end_frame": 474,
+          "motion_end_video_s": 7.9,
+          "crop_at_640x360": [
+            10,
+            15,
+            250,
+            200
+          ],
+          "settled_mean_8bit": 85.54442048067551,
+          "samples": [
+            {
+              "delay_s": 0.05,
+              "frame": 477,
+              "rms_8bit": 9.284617279905527,
+              "rms_relative_to_mean": 0.10853562661053882,
+              "gain": 1.0658969995964642
+            },
+            {
+              "delay_s": 0.15,
+              "frame": 483,
+              "rms_8bit": 5.898043371151673,
+              "rms_relative_to_mean": 0.06894714275940465,
+              "gain": 1.034765330408564
+            },
+            {
+              "delay_s": 0.3,
+              "frame": 492,
+              "rms_8bit": 4.070231940250383,
+              "rms_relative_to_mean": 0.047580332152344744,
+              "gain": 1.024950490021917
+            },
+            {
+              "delay_s": 0.6,
+              "frame": 510,
+              "rms_8bit": 2.5629821806811752,
+              "rms_relative_to_mean": 0.029960833988701262,
+              "gain": 1.0169317081853622
+            },
+            {
+              "delay_s": 1.2,
+              "frame": 546,
+              "rms_8bit": 1.35536609805306,
+              "rms_relative_to_mean": 0.015844003506450047,
+              "gain": 1.0053647887698776
+            },
+            {
+              "delay_s": 2.3,
+              "frame": 612,
+              "rms_8bit": 0.24970641370312102,
+              "rms_relative_to_mean": 0.002919026305865614,
+              "gain": 0.9999580920518232
+            }
+          ]
+        },
+        {
+          "event": {
+            "cycle": 1,
+            "yaw": -180,
+            "pitch": -46,
+            "start": 10.903362462999212,
+            "end": 11.038742174998333
+          },
+          "motion_end_frame": 662,
+          "motion_end_video_s": 11.033333333333333,
+          "crop_at_640x360": [
+            400,
+            15,
+            635,
+            195
+          ],
+          "settled_mean_8bit": 45.00085331896165,
+          "samples": [
+            {
+              "delay_s": 0.05,
+              "frame": 665,
+              "rms_8bit": 3.3284057240877942,
+              "rms_relative_to_mean": 0.07396316910918066,
+              "gain": 1.1042628098196512
+            },
+            {
+              "delay_s": 0.15,
+              "frame": 671,
+              "rms_8bit": 2.661321046801069,
+              "rms_relative_to_mean": 0.05913934626834485,
+              "gain": 1.0731119321971192
+            },
+            {
+              "delay_s": 0.3,
+              "frame": 680,
+              "rms_8bit": 2.1009543750485586,
+              "rms_relative_to_mean": 0.04668698969233315,
+              "gain": 1.0518780457032766
+            },
+            {
+              "delay_s": 0.6,
+              "frame": 698,
+              "rms_8bit": 1.3451838825137206,
+              "rms_relative_to_mean": 0.02989240832788633,
+              "gain": 1.0275988177356068
+            },
+            {
+              "delay_s": 1.2,
+              "frame": 734,
+              "rms_8bit": 0.8344429862318391,
+              "rms_relative_to_mean": 0.018542825850820843,
+              "gain": 1.0103404743610687
+            },
+            {
+              "delay_s": 2.3,
+              "frame": 800,
+              "rms_8bit": 0.18038249118004854,
+              "rms_relative_to_mean": 0.004008423793689312,
+              "gain": 0.9998202988789773
+            }
+          ]
+        },
+        {
+          "event": {
+            "cycle": 2,
+            "yaw": 180,
+            "pitch": 46,
+            "start": 14.038808032000816,
+            "end": 14.170398763999401
+          },
+          "motion_end_frame": 850,
+          "motion_end_video_s": 14.166666666666666,
+          "crop_at_640x360": [
+            10,
+            15,
+            250,
+            200
+          ],
+          "settled_mean_8bit": 85.58564495065768,
+          "samples": [
+            {
+              "delay_s": 0.05,
+              "frame": 853,
+              "rms_8bit": 9.378697776239465,
+              "rms_relative_to_mean": 0.10958260327005218,
+              "gain": 1.0722875508413696
+            },
+            {
+              "delay_s": 0.15,
+              "frame": 859,
+              "rms_8bit": 5.832392585277945,
+              "rms_relative_to_mean": 0.06814685556953469,
+              "gain": 1.036519865055427
+            },
+            {
+              "delay_s": 0.3,
+              "frame": 868,
+              "rms_8bit": 4.0980968587023945,
+              "rms_relative_to_mean": 0.04788299324104004,
+              "gain": 1.0250103580619487
+            },
+            {
+              "delay_s": 0.6,
+              "frame": 886,
+              "rms_8bit": 2.706330234958655,
+              "rms_relative_to_mean": 0.031621310285374654,
+              "gain": 1.015318981996032
+            },
+            {
+              "delay_s": 1.2,
+              "frame": 922,
+              "rms_8bit": 1.3010572592650056,
+              "rms_relative_to_mean": 0.015201816379547043,
+              "gain": 1.004603499377299
+            },
+            {
+              "delay_s": 2.3,
+              "frame": 988,
+              "rms_8bit": 0.24981790682474436,
+              "rms_relative_to_mean": 0.0029189229919196237,
+              "gain": 0.999904768277287
+            }
+          ]
+        },
+        {
+          "event": {
+            "cycle": 2,
+            "yaw": -180,
+            "pitch": -46,
+            "start": 17.170464666000044,
+            "end": 17.303022426000098
+          },
+          "motion_end_frame": 1037,
+          "motion_end_video_s": 17.283333333333335,
+          "crop_at_640x360": [
+            400,
+            15,
+            635,
+            195
+          ],
+          "settled_mean_8bit": 44.988543120973866,
+          "samples": [
+            {
+              "delay_s": 0.05,
+              "frame": 1040,
+              "rms_8bit": 3.8777668742752542,
+              "rms_relative_to_mean": 0.08619454210481917,
+              "gain": 1.113412956042324
+            },
+            {
+              "delay_s": 0.15,
+              "frame": 1046,
+              "rms_8bit": 2.7809079354604007,
+              "rms_relative_to_mean": 0.06181369172108018,
+              "gain": 1.0697284309694344
+            },
+            {
+              "delay_s": 0.3,
+              "frame": 1055,
+              "rms_8bit": 2.076730770371208,
+              "rms_relative_to_mean": 0.04616132522422196,
+              "gain": 1.0464013538434194
+            },
+            {
+              "delay_s": 0.6,
+              "frame": 1073,
+              "rms_8bit": 1.3458468065803442,
+              "rms_relative_to_mean": 0.02991532317375497,
+              "gain": 1.026816196970112
+            },
+            {
+              "delay_s": 1.2,
+              "frame": 1109,
+              "rms_8bit": 0.774237453211153,
+              "rms_relative_to_mean": 0.017209658270756493,
+              "gain": 1.0099675853119399
+            },
+            {
+              "delay_s": 2.3,
+              "frame": 1175,
+              "rms_8bit": 0.17814830115362212,
+              "rms_relative_to_mean": 0.003959859306281215,
+              "gain": 0.9999892474113483
+            }
+          ]
+        }
+      ]
+    },
+    "count-64": {
+      "note": "Review post-turn convergence, using each shot's own settled image as a reference.\n\nThis is a transient-image difference proxy, not an absolute quality score.\nExposure is normalized within each wall crop. Torch, hands and HUD are excluded.\nThe motion end is estimated from captured frames, not ffmpeg startup time.\n",
+      "events": [
+        {
+          "event": {
+            "cycle": 0,
+            "yaw": 180,
+            "pitch": 46,
+            "start": 1.5002821519992722,
+            "end": 1.6525304059978225
+          },
+          "motion_end_frame": 98,
+          "motion_end_video_s": 1.6333333333333333,
+          "crop_at_640x360": [
+            10,
+            15,
+            250,
+            200
+          ],
+          "settled_mean_8bit": 82.08478696256097,
+          "samples": [
+            {
+              "delay_s": 0.05,
+              "frame": 101,
+              "rms_8bit": 3.2327868314120165,
+              "rms_relative_to_mean": 0.039383507602772934,
+              "gain": 0.9869294220443928
+            },
+            {
+              "delay_s": 0.15,
+              "frame": 107,
+              "rms_8bit": 2.360539469456621,
+              "rms_relative_to_mean": 0.028757331983248827,
+              "gain": 0.9982762627104877
+            },
+            {
+              "delay_s": 0.3,
+              "frame": 116,
+              "rms_8bit": 1.7261327689652486,
+              "rms_relative_to_mean": 0.021028656257005833,
+              "gain": 1.0004312986607398
+            },
+            {
+              "delay_s": 0.6,
+              "frame": 134,
+              "rms_8bit": 1.2672831409436456,
+              "rms_relative_to_mean": 0.015438709020730672,
+              "gain": 1.001253192454091
+            },
+            {
+              "delay_s": 1.2,
+              "frame": 170,
+              "rms_8bit": 0.8474799526161733,
+              "rms_relative_to_mean": 0.010324446026798004,
+              "gain": 1.0003013384169184
+            },
+            {
+              "delay_s": 2.3,
+              "frame": 236,
+              "rms_8bit": 0.24985531532034855,
+              "rms_relative_to_mean": 0.003043868718746971,
+              "gain": 0.9996800636686084
+            }
+          ]
+        },
+        {
+          "event": {
+            "cycle": 0,
+            "yaw": -180,
+            "pitch": -46,
+            "start": 4.652600571000221,
+            "end": 4.791266451000411
+          },
+          "motion_end_frame": 287,
+          "motion_end_video_s": 4.783333333333333,
+          "crop_at_640x360": [
+            400,
+            15,
+            635,
+            195
+          ],
+          "settled_mean_8bit": 43.757908368434684,
+          "samples": [
+            {
+              "delay_s": 0.05,
+              "frame": 290,
+              "rms_8bit": 1.5785060134151518,
+              "rms_relative_to_mean": 0.03607361668488311,
+              "gain": 1.0486361057716211
+            },
+            {
+              "delay_s": 0.15,
+              "frame": 296,
+              "rms_8bit": 1.3970226144019045,
+              "rms_relative_to_mean": 0.03192617441033046,
+              "gain": 1.0383717015413272
+            },
+            {
+              "delay_s": 0.3,
+              "frame": 305,
+              "rms_8bit": 1.188007987727219,
+              "rms_relative_to_mean": 0.027149560662826457,
+              "gain": 1.0235716633935066
+            },
+            {
+              "delay_s": 0.6,
+              "frame": 323,
+              "rms_8bit": 0.9179844061156623,
+              "rms_relative_to_mean": 0.020978708543067884,
+              "gain": 1.014428742150433
+            },
+            {
+              "delay_s": 1.2,
+              "frame": 359,
+              "rms_8bit": 0.6552615155600837,
+              "rms_relative_to_mean": 0.01497469920277919,
+              "gain": 1.004681323705528
+            },
+            {
+              "delay_s": 2.3,
+              "frame": 425,
+              "rms_8bit": 0.16143529232210102,
+              "rms_relative_to_mean": 0.003689282654071153,
+              "gain": 0.999907237072078
+            }
+          ]
+        },
+        {
+          "event": {
+            "cycle": 1,
+            "yaw": 180,
+            "pitch": 46,
+            "start": 7.791334688998177,
+            "end": 7.938155452000501
+          },
+          "motion_end_frame": 476,
+          "motion_end_video_s": 7.933333333333334,
+          "crop_at_640x360": [
+            10,
+            15,
+            250,
+            200
+          ],
+          "settled_mean_8bit": 82.01309335357843,
+          "samples": [
+            {
+              "delay_s": 0.05,
+              "frame": 479,
+              "rms_8bit": 2.945037553355472,
+              "rms_relative_to_mean": 0.03590935828573978,
+              "gain": 1.0047286421941577
+            },
+            {
+              "delay_s": 0.15,
+              "frame": 485,
+              "rms_8bit": 2.234798555243271,
+              "rms_relative_to_mean": 0.02724928988604917,
+              "gain": 1.0031362084179856
+            },
+            {
+              "delay_s": 0.3,
+              "frame": 494,
+              "rms_8bit": 1.5651025894054766,
+              "rms_relative_to_mean": 0.01908356977413275,
+              "gain": 1.0029171531277161
+            },
+            {
+              "delay_s": 0.6,
+              "frame": 512,
+              "rms_8bit": 1.0875347725095168,
+              "rms_relative_to_mean": 0.013260501805740815,
+              "gain": 1.0026949261567555
+            },
+            {
+              "delay_s": 1.2,
+              "frame": 548,
+              "rms_8bit": 0.7154667710041843,
+              "rms_relative_to_mean": 0.008723811549451413,
+              "gain": 1.000835118919725
+            },
+            {
+              "delay_s": 2.3,
+              "frame": 614,
+              "rms_8bit": 0.24765072317530293,
+              "rms_relative_to_mean": 0.0030196486079072803,
+              "gain": 0.9999906610726327
+            }
+          ]
+        },
+        {
+          "event": {
+            "cycle": 1,
+            "yaw": -180,
+            "pitch": -46,
+            "start": 10.93822031899981,
+            "end": 11.070441967000079
+          },
+          "motion_end_frame": 664,
+          "motion_end_video_s": 11.066666666666666,
+          "crop_at_640x360": [
+            400,
+            15,
+            635,
+            195
+          ],
+          "settled_mean_8bit": 43.691336136263864,
+          "samples": [
+            {
+              "delay_s": 0.05,
+              "frame": 667,
+              "rms_8bit": 1.4950533216212774,
+              "rms_relative_to_mean": 0.03421853057911821,
+              "gain": 1.0433960568120566
+            },
+            {
+              "delay_s": 0.15,
+              "frame": 673,
+              "rms_8bit": 1.3106967228573154,
+              "rms_relative_to_mean": 0.029999007555400338,
+              "gain": 1.0340362392348326
+            },
+            {
+              "delay_s": 0.3,
+              "frame": 682,
+              "rms_8bit": 1.1834757819397939,
+              "rms_relative_to_mean": 0.02708719592023434,
+              "gain": 1.0245297107202165
+            },
+            {
+              "delay_s": 0.6,
+              "frame": 700,
+              "rms_8bit": 0.8883076224789906,
+              "rms_relative_to_mean": 0.02033143641358439,
+              "gain": 1.0117017822255758
+            },
+            {
+              "delay_s": 1.2,
+              "frame": 736,
+              "rms_8bit": 0.6844180701318971,
+              "rms_relative_to_mean": 0.015664846412509443,
+              "gain": 1.0030504131367992
+            },
+            {
+              "delay_s": 2.3,
+              "frame": 802,
+              "rms_8bit": 0.15546100650194147,
+              "rms_relative_to_mean": 0.0035581655369177102,
+              "gain": 1.0000323739777
+            }
+          ]
+        },
+        {
+          "event": {
+            "cycle": 2,
+            "yaw": 180,
+            "pitch": 46,
+            "start": 14.070509484998183,
+            "end": 14.203414649000479
+          },
+          "motion_end_frame": 852,
+          "motion_end_video_s": 14.2,
+          "crop_at_640x360": [
+            10,
+            15,
+            250,
+            200
+          ],
+          "settled_mean_8bit": 82.00941406260517,
+          "samples": [
+            {
+              "delay_s": 0.05,
+              "frame": 855,
+              "rms_8bit": 3.2118073947090053,
+              "rms_relative_to_mean": 0.039163886627176035,
+              "gain": 0.9932960291695142
+            },
+            {
+              "delay_s": 0.15,
+              "frame": 861,
+              "rms_8bit": 2.4004036552877634,
+              "rms_relative_to_mean": 0.029269854963910838,
+              "gain": 0.999366806213552
+            },
+            {
+              "delay_s": 0.3,
+              "frame": 870,
+              "rms_8bit": 1.7465953559903344,
+              "rms_relative_to_mean": 0.021297498292781374,
+              "gain": 1.0019207499840972
+            },
+            {
+              "delay_s": 0.6,
+              "frame": 888,
+              "rms_8bit": 1.2474214597575792,
+              "rms_relative_to_mean": 0.015210710550929069,
+              "gain": 1.002342680065679
+            },
+            {
+              "delay_s": 1.2,
+              "frame": 924,
+              "rms_8bit": 0.7648290931761051,
+              "rms_relative_to_mean": 0.009326113372694532,
+              "gain": 1.0002138155847928
+            },
+            {
+              "delay_s": 2.3,
+              "frame": 990,
+              "rms_8bit": 0.2489518354356432,
+              "rms_relative_to_mean": 0.003035649483431205,
+              "gain": 0.9998840555762516
+            }
+          ]
+        },
+        {
+          "event": {
+            "cycle": 2,
+            "yaw": -180,
+            "pitch": -46,
+            "start": 17.203484227000445,
+            "end": 17.33724126800007
+          },
+          "motion_end_frame": 1040,
+          "motion_end_video_s": 17.333333333333332,
+          "crop_at_640x360": [
+            400,
+            15,
+            635,
+            195
+          ],
+          "settled_mean_8bit": 43.690852014514206,
+          "samples": [
+            {
+              "delay_s": 0.05,
+              "frame": 1043,
+              "rms_8bit": 1.5387380027316468,
+              "rms_relative_to_mean": 0.035218768501481146,
+              "gain": 1.0417012381110793
+            },
+            {
+              "delay_s": 0.15,
+              "frame": 1049,
+              "rms_8bit": 1.3504365488386045,
+              "rms_relative_to_mean": 0.030908908537420746,
+              "gain": 1.032656703107789
+            },
+            {
+              "delay_s": 0.3,
+              "frame": 1058,
+              "rms_8bit": 1.192560547434408,
+              "rms_relative_to_mean": 0.02729542896161047,
+              "gain": 1.0238196721489512
+            },
+            {
+              "delay_s": 0.6,
+              "frame": 1076,
+              "rms_8bit": 0.8731868165668412,
+              "rms_relative_to_mean": 0.019985575384905894,
+              "gain": 1.011876902157768
+            },
+            {
+              "delay_s": 1.2,
+              "frame": 1112,
+              "rms_8bit": 0.6067682474843267,
+              "rms_relative_to_mean": 0.013887764131556802,
+              "gain": 1.0036766490278948
+            },
+            {
+              "delay_s": 2.3,
+              "frame": 1178,
+              "rms_8bit": 0.15333566728129366,
+              "rms_relative_to_mean": 0.0035095600156837222,
+              "gain": 1.000090452852722
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
