@@ -76,10 +76,18 @@ therefore does not solve every traversal spike.
 
 ## Exact release validation
 
-The release removes the temporary GPU logger, calibrated-timestamp extension and
-diagnostic switch. Only `libcore.so` differs from the previously installed jar;
-all Java and shader resources are byte-identical. The exact release jar was then
-playtested again before installation.
+The initial release removed the temporary GPU logger and frame-slot diagnostic
+switch. A later binary audit found that a stale `device.cpp.o` still contained
+the optional calibrated-timestamp extension branch, gated by
+`MCVR_GPU_FRAME_LOG`. That variable was absent in the release tests and normal
+play, so the branch was inactive. The earlier claim that this binary removed
+all diagnostic code was too broad. Source restoration had preserved an old
+modification time, leaving this object unrecompiled.
+
+Only `libcore.so` differs from the preceding cache-corrected jar; all Java and
+shader resources are byte-identical. The following measurements belong to the
+initial `4ab830b6…` release, which was playtested before installation. They are
+retained under their original binary identity.
 
 | Release, first / repeat | Rapid cave turns | Validated forest lane |
 |---|---:|---:|
@@ -117,6 +125,42 @@ matched captures. Release crop luma changes were +0.021 / −0.062 / +0.028 on a
 on every rendering path. Physical fullscreen pacing and comfort still require
 an unlocked desktop and a play check.
 
+## Recompiled native validation
+
+The affected source was restored with fresh modification times and its dependent
+objects rebuilt. The new binary contains none of the GPU logger, calibrated
+extension, turn-reset diagnostic, or frame-slot-switch environment strings.
+It changes only the native jar entry; no production source behavior or quality
+setting changed. The source patch series is unchanged.
+
+The corrected `7ce983fd…` jar was independently playtested and is now installed.
+Both cave intervals again included ten fast turns; both forest intervals traveled
+a verified 190.81 blocks. These results are separate from the initial release:
+
+| Recompiled native, first / repeat | Rapid cave turns | Validated forest lane |
+|---|---:|---:|
+| Engine average FPS | 191.66 / 191.67 | 221.46 / 220.29 |
+| Engine 1% low FPS | 154.79 / 153.98 | 145.48 / 153.26 |
+| Longest engine interval, ms | 6.926 / 6.965 | 10.939 / 8.550 |
+| Engine intervals over 6.944 ms | 0 / 1 | 19 / 12 |
+| Longest MangoApp interval, ms | 26.49 / 31.71 | 9.01 / 6.33 |
+
+All four native log windows cover more than 99.97% of their requested duration.
+One of 11,498 cave engine intervals exceeds the 144 FPS budget. Longer forest
+and MangoApp intervals remain; this does not establish a strict floor or
+physical display delivery.
+
+Six new cave turns give relative RMS 0.03148 at 50 ms and 0.02165 at 300 ms,
+with settled luma 81.98/43.49. These are comparable to the preceding build;
+the native cleanup is not a new noise treatment. A new VSync material launch
+loaded Khronos synchronization validation and reported no validation errors.
+Matched material crops retain relief and reflections, with luma differences
+−0.013 / +0.066 / +0.024 compared with the initial release.
+
+For future diagnostic removal, invalidate the affected compiled objects and
+audit the resulting binary in addition to reviewing source diffs. Successful
+incremental linking alone did not catch this stale-object issue.
+
 ## Source, measurements and recovery
 
 The normal thirteen-patch MCVR series plus all four optional cave patches apply
@@ -125,10 +169,10 @@ cleanly. The resulting framework files match the built release sources, and all
 The optional cave profile is still needed for the shader fixes described in
 [cave-artifacts.md](cave-artifacts.md).
 
-Release jar SHA256:
-`4ab830b6ff524707bafa8194df824f32db71a3948183c610ea3be98d3e52cb40`.
+Installed recompiled jar SHA256:
+`7ce983fd0d1276302e22f6f6d0b13e4a08f3f97bd0ceae67ceaafc3afcfa300b`.
 Native SHA256:
-`2365b23cb2abbec58b9d1bb2d716e4970fb867d056bfec7799fe2b9fd87b59f9`.
+`7ae07e54c58042e4539cc43656fb03c396b8ede54a9ce69a9161e6fda41bd1a1`.
 
 See the [full-precision measurements](../measurements/frame-slots-2026-09-27.json)
 and [diagnostic source and log-review procedure](../diagnostics/frame-slots/README.md).
@@ -136,8 +180,9 @@ The analysis tool rejects missing/duplicate/mismatched frame identities and bad
 clock calibration; seven synthetic regression tests and all eight diagnostic
 measurement windows passed.
 
-Installation replaces only the jar, with a checksum-verified copy of the previous
-cache-corrected jar retained. Settings and the saved cave-region hash are
-unchanged. To revert this scheduling step, restore that previous jar while the
-game is closed, before reverting the older cache/sampling steps. The production
-build does not expose the temporary diagnostic switch as a rollback option.
+Installation replaces only the jar. A new checksum-verified backup retains the
+initial frame-slot jar, and its older backup still retains the cache-corrected
+jar. Settings and the saved cave-region hash are unchanged. With the game closed,
+revert the native cleanup first, then the frame-slot step if desired, before
+older cache/sampling steps. The production build has no temporary frame-slot
+switch as a rollback option.
