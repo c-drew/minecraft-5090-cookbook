@@ -3,7 +3,7 @@
 #
 # Usage: scripts/build.sh [WORK_DIR]        (default: ./work)
 # Output: WORK_DIR/Radiance/build/libs/radiance-*.jar
-# Optional: MCVR_CAVE_COUNTS=1 applies the experimental cave-count correction.
+# Optional: MCVR_CAVE_COUNTS=1 applies the cave-count and sampling experiments.
 # Read docs/cave-artifacts.md for its brightness calibration and performance cost.
 #
 # Needs: git, cmake, ninja, a C++20 compiler, JDK 21 (JAVA_HOME), Vulkan headers and shaderc

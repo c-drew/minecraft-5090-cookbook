@@ -1,4 +1,4 @@
-# Experimental cave-count correction; read docs/cave-artifacts.md before using.
+# Experimental cave-count correction and sampling optimization; read docs/cave-artifacts.md.
 render_pipeline.module.ray_tracing.attribute.atmosphere_planet_radius=6360.0
 render_pipeline.module.ray_tracing.attribute.atmosphere_top_radius=6460.0
 render_pipeline.module.ray_tracing.attribute.basic_radiance=0.5
@@ -14,7 +14,7 @@ render_pipeline.module.ray_tracing.attribute.indirect_volumetric_cloud_ambient_s
 render_pipeline.module.ray_tracing.attribute.indirect_volumetric_cloud_light_steps=5
 render_pipeline.module.ray_tracing.attribute.indirect_volumetric_cloud_reflection_max_roughness=0.12
 render_pipeline.module.ray_tracing.attribute.indirect_volumetric_cloud_view_steps=20
-render_pipeline.module.ray_tracing.attribute.initial_samples=64
+render_pipeline.module.ray_tracing.attribute.initial_samples=48
 render_pipeline.module.ray_tracing.attribute.mie_anisotropy=0.8
 render_pipeline.module.ray_tracing.attribute.mie_scale_height=1.2
 render_pipeline.module.ray_tracing.attribute.mie_scattering_coefficient=0.000021,0.000021,0.000021

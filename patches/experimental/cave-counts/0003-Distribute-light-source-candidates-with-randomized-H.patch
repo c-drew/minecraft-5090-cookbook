@@ -1,0 +1,47 @@
+From c13daaa40f5c79d24d2988bb46eb7fc429ebaaa0 Mon Sep 17 00:00:00 2001
+From: c-drew <101952850+c-drew@users.noreply.github.com>
+Date: Sun, 27 Sep 2026 04:45:09 -0400
+Subject: [PATCH 3/3] Distribute light-source candidates with randomized
+ Hammersley points
+
+Use independently shifted coordinates for the uniform light index and chunk-alias slot. Each candidate retains uniform source marginals and the existing proposal PDF, while the candidate set covers the available sources more evenly. Alias tests and sampled points on the light stay random.
+---
+ .../advanced/common/direct_light_reservoir.glsl      | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/src/shader/world/ray_tracing/internal/advanced/common/direct_light_reservoir.glsl b/src/shader/world/ray_tracing/internal/advanced/common/direct_light_reservoir.glsl
+index 9c83353..06f4d64 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/common/direct_light_reservoir.glsl
++++ b/src/shader/world/ray_tracing/internal/advanced/common/direct_light_reservoir.glsl
+@@ -404,10 +404,18 @@ bool sampleAreaLightSource(ivec2 pixel,
+     candidateSeed = 0u;
+     candidateSeed = xxhash32(uvec3(baseSeed ^ sampleIndex, uint(pixel.x), (uint(pixel.y) << 8u) ^ sampleIndex));
+ 
++    // Randomly shifted Hammersley points spread source choices across the
++    // candidate budget. Independent shifts preserve uniform marginals and the
++    // existing proposal PDF; point-on-light and alias decisions stay random.
++    uint sourceSequenceSeed = xxhash32(uvec3(baseSeed ^ 0x7F4A7C15u, uint(pixel.x), uint(pixel.y)));
++    vec2 sourceShift = vec2(rand(sourceSequenceSeed), rand(sourceSequenceSeed));
++    float lightXi = fract(float(sampleIndex) / float(ADV_INITIAL_SAMPLES) + sourceShift.x);
++    float chunkXi = fract(float(bitfieldReverse(sampleIndex)) * 2.3283064365386963e-10 + sourceShift.y);
++
+     ChunkLightNeighborhood neighborhood = chunkLightNeighborhoods[centerChunkIndex];
+     float sampledChunkProb = 0.0;
+     int neighborIndex =
+-        sampleChunkLightNeighborhoodEntry(neighborhood, rand(candidateSeed), rand(candidateSeed), sampledChunkProb);
++        sampleChunkLightNeighborhoodEntry(neighborhood, chunkXi, rand(candidateSeed), sampledChunkProb);
+     if (neighborIndex < 0 || sampledChunkProb <= 1e-8) { return false; }
+ 
+     ChunkLightNeighborhoodEntry neighborEntry = neighborhood.entries[neighborIndex];
+@@ -419,7 +427,7 @@ bool sampleAreaLightSource(ivec2 pixel,
+ 
+     ChunkPackedLightBuffer lightBuffer = ChunkPackedLightBuffer(sampledChunk.lightBufferAddress);
+ 
+-    float scaledLightIndex = clamp(rand(candidateSeed), 0.0, ADV_UNIT_OPEN_UPPER_BOUND) * float(sampledChunk.lightCount);
++    float scaledLightIndex = clamp(lightXi, 0.0, ADV_UNIT_OPEN_UPPER_BOUND) * float(sampledChunk.lightCount);
+     lightIndex = min(uint(floor(scaledLightIndex)), sampledChunk.lightCount - 1u);
+     chunkLight = lightBuffer.lights[lightIndex];
+     lightProbInChunk = 1.0 / float(sampledChunk.lightCount);
+-- 
+2.55.0
+

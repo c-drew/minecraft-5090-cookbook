@@ -1,11 +1,12 @@
 # Fast turns in torchlit caves
 
 Status, September 27, 2026: a real reservoir-count defect is corrected and the
-observed spots are substantially reduced. Fine transient noise remains. The
-64-candidate profile increases light-sampling cost. An initially reported outdoor
-comparison was invalid (see below), and verified outdoor tests are being rerun.
-The profile remains experimental and does not yet establish a 144 FPS minimum
-without distracting artifacts.
+observed spots are substantially reduced. Fine transient noise remains. A
+sampling optimization preserves comparable stability with 48 candidates. Valid
+outdoor traversal tests exceed 144 FPS at the 1% low, but rare longer frames and
+rapid-turn spikes remain. This does not establish a strict 144 FPS minimum or
+eliminate all visible defects. An earlier outdoor comparison was invalid; its
+correction is retained below.
 
 ## Reproduction and diagnosis
 
@@ -95,7 +96,7 @@ above. The fast-turn cave capture and fixed-camera lighting checks are unaffecte
 
 ## Reproducing the experimental profile
 
-Build with the optional patch after the twelve normal MCVR patches:
+Build with the optional patches after the twelve normal MCVR patches:
 
 ```sh
 MCVR_CAVE_COUNTS=1 scripts/build.sh
@@ -105,9 +106,13 @@ Close the game and back up the jar, shader settings, `fork.properties`, and DLSS
 libraries before installing. Use
 [`config/experimental/cave-counts/advanced.zip.txt`](../config/experimental/cave-counts/advanced.zip.txt)
 and [`fork.properties`](../config/experimental/cave-counts/fork.properties).
-The three relevant shader settings are `initial_samples=64`,
+The three relevant shader settings are `initial_samples=48`,
 `direct_light_strength=32.0`, and `player_block_light_shadows=render_pipeline.false`.
 The sample count is light candidates per pixel, not full path samples.
+
+The current optional stack includes the count correction and the sampling
+optimization below. To reproduce the earlier count-only comparison, apply only
+experimental patch 0001 and use 64 candidates.
 
 Download Linux SR and RR libraries from the official
 [NVIDIA DLSS 310.9.1 release](https://github.com/NVIDIA/DLSS/tree/v310.9.1/lib/Linux_x86_64/rel).
@@ -119,12 +124,76 @@ under those loader filenames in `minecraft/radiance/`. Verified SHA256:
 | `libnvidia-ngx-dlss.so.310.9.1` | `7561f16cab74e2b7ccf791bf44bb9cc43abb44bcf78f33c5663520ad4e857e02` |
 | `libnvidia-ngx-dlssd.so.310.9.1` | `15043b4129a420b09dcd45a0294cb15f135da23054602827f68095f8080b05b0` |
 
-The tested local jar was `9847db5e95db124218b7c80d5ce3952c1f08111f2750301c2f1cf8598036ab23`.
+The count-only local jar was `9847db5e95db124218b7c80d5ce3952c1f08111f2750301c2f1cf8598036ab23`.
 Rebuilding can change jar metadata and native bytes; the hash is provenance for
 the tested artifact, not a promise of a byte-identical rebuild. Forty-seven
 affected shader variants compiled. The shader-only artifact preserved the prior
 camera-corrected Java/native payload, whose native SHA256 was
 `9fd73ac6de346bf05564a06fd64bace71037573b3ef7b4a338525286c996c72d`.
+
+## Reducing sampling cost without changing final material shading
+
+Two additional experimental patches use a cheaper, positive importance target
+for rough opaque dielectrics (roughness at least 0.35) and randomly shifted
+Hammersley points for light/chunk source choices. Smooth, metallic and
+transmissive targets retain the full material evaluation. Final shading always
+uses the original Disney BRDF, traced visibility and parallax shadows.
+Candidate count falls from 64 to 48; render resolution, four bounces, SHaRC,
+textures and the reconstruction model stay the same.
+
+The [RTXDI application bridge](https://github.com/NVIDIA-RTX/RTXDI/blob/main/Doc/RtxdiApplicationBridge.md)
+permits approximate importance BRDFs, distinct from final shading. The source
+sequence follows the [Hammersley construction](https://www.pbr-book.org/4ed/Sampling_and_Reconstruction/Halton_Sampler),
+with independent uniform shifts per pixel/frame. Source marginals and existing
+proposal PDFs are retained; alias decisions and points on lights remain random.
+Explicit unoccluded targets also make initial, temporal and spatial stages
+consistent. This is not credited with removing a live height march: the compute
+surface-preparation path already disables that march in this configuration.
+
+| Mean relative wall RMS over six turns | Count fix, 64 | Optimized, 48 |
+|---|---:|---:|
+| 50 ms after turn | 0.03666 | 0.0381 |
+| 150 ms | 0.02969 | 0.0304 |
+| 300 ms | 0.02382 | 0.0242 |
+| 600 ms | 0.01753 | 0.0178 |
+| 1.2 s | 0.01215 | 0.0122 |
+
+This is comparable convergence, not an additional artifact reduction over the
+64-candidate fix. Both retain fine transient noise. The optimized profile is
+about 60% lower than the original faulty sampler at 50 ms and 49% lower at
+300 ms by this metric. Settled wall brightness stays near 82/44.
+
+The corrected outdoor test uses an artificial elevated forest lane: an invisible
+floor at Y=79 and cleared headroom prevent collision with terrain and trees.
+All four 30-second runs traveled 190.8 blocks, verified from start/end positions
+and endpoint captures. The first fixed-height natural-route attempt hit a tree
+after 23.2 blocks and was rejected.
+
+| Forest lane, 260 cap, headless Gamescope | Count fix, 64 | Optimized, 48 |
+|---|---:|---:|
+| First pass, average / 1% low FPS | 216.1 / 170.0 | 222.5 / 172.8 |
+| Repeat, average / 1% low FPS | 214.9 / 176.6 | 221.6 / 183.2 |
+| Frames over 6.944 ms, both runs | 6 / 12,794 | 6 / 13,210 |
+| Worst observed frame | 10.14 ms | 10.43 ms |
+
+The small throughput gain does not establish a strict 144 FPS minimum.
+Thirty-second rapid-turn diagnostics also show outliers: the optimized profile
+averaged 190.4 FPS but MangoApp's 1% low was 65.6 FPS, with a 59.3 ms maximum gap.
+Engine timestamps do not reproduce the largest gaps: world GPU passes remained
+near 5 ms and render-thread frames peaked near 16 ms in the same interval.
+The discrepancy between game rendering and the nested presentation/timing path
+remains unresolved. A visible VSync run aborted because the desktop was locked;
+it is not a display-validation result. A separate attempt to defer the swapchain
+acquire wait produced no useful gain and was rejected.
+
+Three matched material views include gold, copper, glass over glowstone and water.
+Lighting/reflections remained visually comparable; average crop luma differed
+by less than 0.1/255. This is a limited material check, not a guarantee about all
+resource-pack materials. All 194 advanced shader variants compiled. The tested
+jar changes only the advanced shader archive; Java/native bytes are preserved.
+Its SHA256 is `0a74c082111f70e404a319d88ce65ba2f9392d33b5f55922db78f5b0b3a18271`.
+See [sampling measurements](../measurements/cave-sampling-2026-09-27.json) for
+full precision, configuration, convergence events and valid movement records.
 
 To roll back, close the game and restore the saved jar and its corresponding
 settings together. Restoring only the jar while leaving strength 32 can greatly

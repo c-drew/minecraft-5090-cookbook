@@ -1,0 +1,108 @@
+From bc3c39c49c6ed057c1afd0838101a179f8fd7152 Mon Sep 17 00:00:00 2001
+From: c-drew <101952850+c-drew@users.noreply.github.com>
+Date: Sun, 27 Sep 2026 04:45:09 -0400
+Subject: [PATCH 2/3] Use cheaper importance targets for rough opaque light
+ sampling
+
+Select with unoccluded radiance consistently across initial, temporal and spatial reuse; retain the parallax and scene visibility checks on the selected light. For nonmetallic opaque surfaces of roughness at least 0.35, rank light candidates with a positive diffuse-like target. Final shading always retains the exact Disney material evaluation. Smoother, metallic and transmissive surfaces keep full BRDF evaluation for selection as well.
+---
+ .../advanced/common/direct_light_eval.glsl    |  2 +-
+ .../common/direct_light_reservoir.glsl        | 25 ++++++++++++++++---
+ .../common/direct_light_reuse_query.glsl      |  2 +-
+ .../advanced/spatial_reuse/spatial_reuse.comp |  2 +-
+ 4 files changed, 24 insertions(+), 7 deletions(-)
+
+diff --git a/src/shader/world/ray_tracing/internal/advanced/common/direct_light_eval.glsl b/src/shader/world/ray_tracing/internal/advanced/common/direct_light_eval.glsl
+index 1162a63..64799a4 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/common/direct_light_eval.glsl
++++ b/src/shader/world/ray_tracing/internal/advanced/common/direct_light_eval.glsl
+@@ -119,7 +119,7 @@ vec3 shadeStoredAreaLightReservoir(SampledSurface surface,
+     float ignoredTargetFunction = 0.0;
+     vec3 contribution = evaluateAreaLightSampleContribution(
+         surface, viewDir, referenceUv, referenceWorldPos, atlasUvMin, atlasUvMax, dPduWorld, dPdvWorld, baseGeoNormal,
+-        false, -1, 0.0, reservoir.emission, reservoir.point, reservoir.normal, false,
++        false, -1, 0.0, reservoir.emission, reservoir.point, reservoir.normal, false, false,
+         ignoredTargetFunction);
+     return contribution * transmission * reservoir.contributionWeight;
+ }
+diff --git a/src/shader/world/ray_tracing/internal/advanced/common/direct_light_reservoir.glsl b/src/shader/world/ray_tracing/internal/advanced/common/direct_light_reservoir.glsl
+index bed6f45..9c83353 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/common/direct_light_reservoir.glsl
++++ b/src/shader/world/ray_tracing/internal/advanced/common/direct_light_reservoir.glsl
+@@ -328,6 +328,7 @@ vec3 evaluateAreaLightSampleContribution(SampledSurface surface,
+                                          vec3 sampledPoint,
+                                          vec3 lightNormal,
+                                          bool applyLocalHeightVisibility,
++                                         bool resamplingTargetOnly,
+                                          out float targetFunction) {
+     targetFunction = 0.0;
+     if (!directLightSurfaceEligible(surface) || !isFiniteVec3(lightEmission) || !isFiniteVec3(sampledPoint) ||
+@@ -350,9 +351,21 @@ vec3 evaluateAreaLightSampleContribution(SampledSurface surface,
+     float lightNoL = dot(lightNormal, -sampledLightDir);
+     if (lightNoL <= 1e-6) { return vec3(0.0); }
+ 
+-    float lightPdf;
+-    vec3 lightBRDF = DisneyEval(surface.mat, viewDir, surface.shadingNormal, sampledLightDir, lightPdf);
+-    if (!isFiniteFloat(lightPdf) || !isFiniteVec3(lightBRDF) || lightPdf <= 1e-6) { return vec3(0.0); }
++    vec3 lightBRDF;
++    if (resamplingTargetOnly && surface.mat.roughness >= 0.35 && surface.mat.metallic <= EPS &&
++        surface.mat.transmission <= EPS && dot(viewDir, surface.shadingNormal) > 0.0) {
++        // A positive, diffuse-like importance target for rough opaque dielectrics.
++        // This only chooses the light: final shading still evaluates DisneyEval
++        // and full visibility. Keep a dielectric floor for black glossy albedo.
++        float dielectricF0 = (surface.mat.ior - 1.0) / (surface.mat.ior + 1.0);
++        dielectricF0 *= dielectricF0;
++        lightBRDF = (surface.mat.albedo + vec3(dielectricF0)) * INV_PI *
++                    max(dot(sampledLightDir, surface.shadingNormal), 0.0);
++    } else {
++        float lightPdf;
++        lightBRDF = DisneyEval(surface.mat, viewDir, surface.shadingNormal, sampledLightDir, lightPdf);
++        if (!isFiniteFloat(lightPdf) || !isFiniteVec3(lightBRDF) || lightPdf <= 1e-6) { return vec3(0.0); }
++    }
+ 
+     if (applyLocalHeightVisibility && traceLocalHeight) {
+         HeightMapHit shadowSelfHit;
+@@ -449,9 +462,13 @@ bool areaSampleLights(SampledSurface surface,
+     if (areaPdf <= 1e-8) { return false; }
+ 
+     float targetFunction = 0.0;
++    // ReSTIR selects with unoccluded radiance. The selected sample is checked
++    // by the visibility pass and final shading, including local height shadows.
++    // Marching the height map for every candidate is redundant here and also
++    // disagrees with the unoccluded target used by spatial reuse.
+     evaluateAreaLightSampleContribution(surface, viewDir, referenceUv, referenceWorldPos, atlasUvMin, atlasUvMax,
+                                         dPduWorld, dPdvWorld, baseGeoNormal, traceLocalHeight, normalTextureID,
+-                                        maxDepthWorld, light.emission.rgb, sampledPoint, lightNormal, true,
++                                        maxDepthWorld, light.emission.rgb, sampledPoint, lightNormal, false, true,
+                                         targetFunction);
+     if (targetFunction <= 1e-8) { return false; }
+ 
+diff --git a/src/shader/world/ray_tracing/internal/advanced/common/direct_light_reuse_query.glsl b/src/shader/world/ray_tracing/internal/advanced/common/direct_light_reuse_query.glsl
+index 02aa399..fb1f2f2 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/common/direct_light_reuse_query.glsl
++++ b/src/shader/world/ray_tracing/internal/advanced/common/direct_light_reuse_query.glsl
+@@ -195,7 +195,7 @@ float evaluateReservoirTargetAtQuery(AreaLightReservoir reservoir,
+     evaluateAreaLightSampleContribution(surface, query.viewDir, cache.textureUV, cache.planeHitWorldPos,
+                                         cache.atlasUvMin, cache.atlasUvMax, cache.dPduWorld, cache.dPdvWorld,
+                                         cache.baseGeoNormal, query.traceLocalHeight, query.normalTextureID,
+-                                        query.maxDepthWorld, reservoir.emission, reservoir.point, reservoir.normal, true,
++                                        query.maxDepthWorld, reservoir.emission, reservoir.point, reservoir.normal, false, true,
+                                         targetFunction);
+     return targetFunction;
+ }
+diff --git a/src/shader/world/ray_tracing/internal/advanced/spatial_reuse/spatial_reuse.comp b/src/shader/world/ray_tracing/internal/advanced/spatial_reuse/spatial_reuse.comp
+index 2a9fd40..ac3e5d7 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/spatial_reuse/spatial_reuse.comp
++++ b/src/shader/world/ray_tracing/internal/advanced/spatial_reuse/spatial_reuse.comp
+@@ -135,7 +135,7 @@ float evaluateSpatialReuseReservoirTargetAtQuery(SpatialReuseReservoirCandidate
+     evaluateAreaLightSampleContribution(surface, query.viewDir, cache.textureUV, cache.planeHitWorldPos,
+                                         cache.atlasUvMin, cache.atlasUvMax, cache.dPduWorld, cache.dPdvWorld,
+                                         cache.baseGeoNormal, query.traceLocalHeight, query.normalTextureID,
+-                                        query.maxDepthWorld, candidate.emission, candidate.point, candidate.normal, false,
++                                        query.maxDepthWorld, candidate.emission, candidate.point, candidate.normal, false, true,
+                                         targetFunction);
+     return targetFunction;
+ }
+-- 
+2.55.0
+
