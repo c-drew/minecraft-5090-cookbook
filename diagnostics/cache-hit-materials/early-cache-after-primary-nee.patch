@@ -1,0 +1,16 @@
+--- a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+@@ -814,7 +814,12 @@
+             vec3 hitWorldPos = tracedOrigin + tracedDirection * rayState.hitT;
+ #if SHARC_QUERY && USE_SHARC
+             vec3 positionWorld = hitWorldPos + vec3(worldUBO.cameraPos.xyz);
+-            if (sharcAllowQuery(isPrimaryCameraPath, rayState.hitT, hitMat.roughness, rayLobeType(rayState), sharcParameters,
++            // Primary area NEE already owns covered first-segment emission.
++            // Admit an earlier cache only at rough, nonemissive opaque walls.
++            bool earlyDiffuseCache = primaryAreaNeeAccounted && b == 1 && b == startBounce &&
++                hitMat.emission <= EPS && hitMat.transmission <= EPS &&
++                hitMat.roughness >= 0.5 && hitMat.metallic < 0.5;
++            if (sharcAllowQuery(isPrimaryCameraPath && !earlyDiffuseCache, rayState.hitT, hitMat.roughness, rayLobeType(rayState), sharcParameters,
+                                 positionWorld)) {
+                 SharcHitData sharcHitData;
+                 sharcHitData.positionWorld = positionWorld;

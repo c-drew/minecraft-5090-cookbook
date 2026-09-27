@@ -66,6 +66,10 @@ The diagnostic candidate's early turned raw capture has 244 continuation samples
 above Y=1, versus 2,047 in the earlier source capture. Only one is dominated by
 remaining hit shading, versus 1,777 before. Cache samples remain. These are
 different random frames and cannot be treated as a paired variance estimate.
+A [cache-hit material diagnostic](../diagnostics/cache-hit-materials/README.md)
+subsequently traces most extreme samples in the turned view to later hits on
+two actual torch blocks. A guarded earlier-query probe adds no established
+useful improvement and remains outside the selected build.
 
 The three material views retain glass, water, metal reflections and parallax
 relief. Crop mean changes are −0.411 / −0.160 / −0.059 gray levels. Animated
