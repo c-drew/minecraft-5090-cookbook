@@ -16,6 +16,7 @@ into the cookbook. Numbers are fps average or 1% low as noted.
 | Dynamic resolution (render scale follows GPU load) | DLSS Ray Reconstruction spends ~14 ms of CPU on every render size change, so each change is a hitch. A fixed render scale works. |
 | A second graphics queue for BLAS builds | No gain |
 | Spatially filter indirect lighting before DLSS RR | 3×3 and 5×5 prototypes add persistent cave speckles. Removing albedo normalization or using displaced parallax geometry does not cure the regression. [Reproduction and limits](../diagnostics/indirect-prefilter/README.md) |
+| Earlier secondary cache access after rough primary scattering, on the corrected emission base | Saves about 0.082 ms in final composition in one cave test; no convincing convergence gain, general material/outdoor quality unvalidated. [Isolated probe](../diagnostics/first-secondary-cache/README.md) |
 
 ## CPU and scheduling
 

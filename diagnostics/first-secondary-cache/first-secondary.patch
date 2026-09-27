@@ -1,0 +1,73 @@
+diff --git a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+--- a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+@@ -759,6 +759,7 @@
+ void traceSecondary(inout MainRay rayState,
+                    int startBounce,
+                    int isHand,
++                   bool allowFirstSecondaryCache,
+ #if SHARC_QUERY && USE_SHARC
+                    SharcParameters sharcParameters,
+                    inout int sharcDebugBounceCount,
+@@ -766,7 +767,7 @@
+ #endif
+                    out bool hasSecondHit,
+                    out float secondHitDistance) {
+-    bool isPrimaryCameraPath = true;
++    bool isPrimaryCameraPath = !allowFirstSecondaryCache;
+     hasSecondHit = false;
+     secondHitDistance = 0.0;
+ 
+@@ -1243,7 +1244,7 @@
+             MainRay transparentReflectionRay;
+             if (initTransparent(primaryViewState, firstHitMat, firstHitIncomingDirection, firstHitNormal,
+                                 firstHitWorldPos, 0x9E3779B9u, true, transparentReflectionRay)) {
+-                traceSecondary(transparentReflectionRay, startBounce, isHand,
++                traceSecondary(transparentReflectionRay, startBounce, isHand, false,
+ #        if SHARC_QUERY && USE_SHARC
+                                sharcParameters, sharcDebugBounceCount, sharcDebugCacheHit,
+ #        endif
+@@ -1272,7 +1273,7 @@
+                                     0x3C6EF372u, false, transparentRefractionRay)) {
+                     bool hasTransparentRefractionSecondHit = false;
+                     float transparentRefractionSecondHitDistance = 0.0;
+-                    traceSecondary(transparentRefractionRay, secondaryStartBounce, isHand,
++                    traceSecondary(transparentRefractionRay, secondaryStartBounce, isHand, false,
+ #        if SHARC_QUERY && USE_SHARC
+                                    sharcParameters, sharcDebugBounceCount, sharcDebugCacheHit,
+ #        endif
+@@ -1286,7 +1287,7 @@
+                                                     transparentRefractionRay)) {
+                     bool hasTransparentRefractionSecondHit = false;
+                     float transparentRefractionSecondHitDistance = 0.0;
+-                    traceSecondary(transparentRefractionRay, secondaryStartBounce, isHand,
++                    traceSecondary(transparentRefractionRay, secondaryStartBounce, isHand, false,
+ #        if SHARC_QUERY && USE_SHARC
+                                    sharcParameters, sharcDebugBounceCount, sharcDebugCacheHit,
+ #        endif
+@@ -1298,7 +1299,7 @@
+                 transparentRefractionRay.radiance = vec3(0.0);
+                 bool hasTransparentRefractionSecondHit = false;
+                 float transparentRefractionSecondHitDistance = 0.0;
+-                traceSecondary(transparentRefractionRay, secondaryStartBounce, isHand,
++                traceSecondary(transparentRefractionRay, secondaryStartBounce, isHand, false,
+ #        if SHARC_QUERY && USE_SHARC
+                                sharcParameters, sharcDebugBounceCount, sharcDebugCacheHit,
+ #        endif
+@@ -1309,7 +1310,7 @@
+                                        firstHitWorldPos, 0x3C6EF372u, false, transparentRefractionRay)) {
+                 bool hasTransparentRefractionSecondHit = false;
+                 float transparentRefractionSecondHitDistance = 0.0;
+-                traceSecondary(transparentRefractionRay, startBounce, isHand,
++                traceSecondary(transparentRefractionRay, startBounce, isHand, false,
+ #        if SHARC_QUERY && USE_SHARC
+                                sharcParameters, sharcDebugBounceCount, sharcDebugCacheHit,
+ #        endif
+@@ -1343,6 +1344,7 @@
+                 initPreparedSurfaceContinuation(primaryViewState, primaryPrepared, 0xA511E9B3u, mainRay);
+             if (initializedContinuation) {
+                 traceSecondary(mainRay, startBounce, isHand,
++                               startBounce == 1 && firstHitMat.roughness >= 0.5 && firstHitMat.metallic < 0.5,
+ #    if SHARC_QUERY && USE_SHARC
+                                sharcParameters, sharcDebugBounceCount, sharcDebugCacheHit,
+ #    endif

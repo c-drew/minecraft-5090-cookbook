@@ -1,0 +1,97 @@
+{
+  "date": "2026-09-27",
+  "selected": false,
+  "base_sha256": "e54e3c58c21c1539f777c6cbb6582bd342549a8c16ba44f98d9760973da7f0a0",
+  "candidate_sha256": "ec413724e2468e93cb056b52384db1fafb53005aa689594424783d8da3290499",
+  "change": "Permit the first secondary cache lookup after a rough (>=0.5), nonmetallic (<0.5) primary surface at bounce 1. Transparent branches remain excluded. Existing query lobe/cone rules are unchanged.",
+  "reason": "No convincing improvement in six private cave turns. General material and outdoor quality unvalidated. The small isolated GPU pass saving is insufficient reason to select it.",
+  "protocol": {
+    "output": [
+      2560,
+      1440
+    ],
+    "ray_input": [
+      1334,
+      750
+    ],
+    "cap": 144,
+    "capture_hz": 60,
+    "fixed_exposure": 2.0,
+    "turns": 6,
+    "motion_threshold": 3,
+    "candidates": 48,
+    "history_cap": 8,
+    "bounces": 4,
+    "direct_strength": 32,
+    "indirect_strength": 8,
+    "sharc": true,
+    "sharc_update_factor": 5,
+    "dlss": "310.9.1/F"
+  },
+  "compile": {
+    "passed": 173,
+    "total": 173
+  },
+  "runs": [
+    {
+      "name": "control",
+      "mean_relative_rms_by_delay": {
+        "0.05": 0.02870873309671557,
+        "0.15": 0.02312454679848725,
+        "0.3": 0.019660772758506768,
+        "0.6": 0.014837415103433458,
+        "1.2": 0.011132821339762575,
+        "2.3": 0.003522558674184049
+      },
+      "settled_mean_by_direction": [
+        81.74108703032076,
+        42.651501450798335
+      ],
+      "motion_ends_video_s": [
+        1.6333333333333333,
+        4.766666666666667,
+        7.916666666666667,
+        11.033333333333333,
+        14.183333333333334,
+        17.316666666666666
+      ],
+      "last_1000_settled_gpu_mean_ms": {
+        "rt.sharc": 0.1361289,
+        "rt.pass.final_compose": 1.2177626
+      }
+    },
+    {
+      "name": "first",
+      "mean_relative_rms_by_delay": {
+        "0.05": 0.02829371499059078,
+        "0.15": 0.023148558149779685,
+        "0.3": 0.01992842024131076,
+        "0.6": 0.014851792255573636,
+        "1.2": 0.011170984948216493,
+        "2.3": 0.0034149885404785355
+      },
+      "settled_mean_by_direction": [
+        81.7767995222351,
+        42.616190527095476
+      ],
+      "motion_ends_video_s": [
+        1.6333333333333333,
+        4.783333333333333,
+        7.916666666666667,
+        11.05,
+        14.183333333333334,
+        17.333333333333332
+      ],
+      "last_1000_settled_gpu_mean_ms": {
+        "rt.sharc": 0.136932,
+        "rt.pass.final_compose": 1.1357913
+      }
+    }
+  ],
+  "limits": [
+    "One capture per variant; timing alignment uncertain by about one 60Hz capture frame.",
+    "RMS is an exposure-normalized difference from the same run after settling, not ground truth.",
+    "GPU pass costs come from capped settled records, not uncapped throughput or physical display delivery.",
+    "The older combined query-gating probe used different emission behavior and changed three decisions; this probe isolates only first-secondary admission on the corrected emission base."
+  ]
+}

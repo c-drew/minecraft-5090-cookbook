@@ -27,6 +27,8 @@ Subsequent [bounce-guiding and cache-retention experiments](diagnostics/continua
 did not establish a useful further improvement and remain outside the selected build.
 An [indirect-light spatial filter](diagnostics/indirect-prefilter/README.md) passed
 synthetic GPU checks but added persistent cave speckles, and was also rejected.
+An isolated [earlier secondary cache lookup](diagnostics/first-secondary-cache/README.md)
+saved a small amount of pass time without clearly improving cave convergence.
 
 ## Results
 
