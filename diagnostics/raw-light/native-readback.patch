@@ -1,0 +1,278 @@
+--- a/src/core/render/modules/world/ray_tracing/ray_tracing_module.cpp
++++ b/src/core/render/modules/world/ray_tracing/ray_tracing_module.cpp
+@@ -12,6 +12,7 @@
+ #include "core/render/render_framework.hpp"
+ #include "core/render/renderer.hpp"
+ #include "core/render/world.hpp"
++#include "core/util/raw_ray_capture.hpp"
+ #include "core/util/parallel.hpp"
+ 
+ #include <nlohmann/json.hpp>
+@@ -1883,6 +1884,12 @@
+     auto buffers = Renderer::instance().buffers();
+     auto chunks = Renderer::instance().world()->chunks();
+     module->refreshRuntimeBuffers(context->frameIndex);
++    if (!mcvr_raw_capture::directory().empty()) {
++        if (!rawCaptureSlot) { rawCaptureSlot = std::make_shared<mcvr_raw_capture::Slot>(); }
++        auto worldUbo = static_cast<vk::Data::WorldUBO *>(buffers->worldUniformBuffer()->mappedPtr());
++        rawCaptureSlot->begin(context, *worldUbo);
++    }
++
+ 
+     rayTracingDescriptorTable->bindBuffer(buffers->worldUniformBuffer(), 2, 0);
+     rayTracingDescriptorTable->bindBuffer(buffers->lastWorldUniformBuffer(), 2, 1);
+@@ -1961,12 +1968,36 @@
+                 module->renderComputePass(*pass, *this, passVariables);
+             }
+         }, passIter->second);
++        if (rawCaptureSlot && rawCaptureSlot->armed() && passName == "final_compose") {
++            rawCaptureSlot->copy(context, "hdr_before", hdrNoisyOutputImage);
++        }
+     };
+     module->shaderPack_->executeCommands(
+         ShaderPackLoader::Stage::RayTracing,
+         module->shaderPack_->execution(ShaderPackLoader::Stage::RayTracing).commands, variables,
+         module->executionExpressionVariables(), true, RayTracingModule::executionLoopLimit, executePass);
+     module->dispatchWithDynamicSize_ = false;
++    if (rawCaptureSlot && rawCaptureSlot->armed()) {
++        rawCaptureSlot->copy(context, "hdr_after", hdrNoisyOutputImage);
++        rawCaptureSlot->copy(context, "diffuse_albedo", diffuseAlbedoImage);
++        rawCaptureSlot->copy(context, "specular_albedo", specularAlbedoImage);
++        rawCaptureSlot->copy(context, "normal_roughness", normalRoughnessImage);
++        rawCaptureSlot->copy(context, "motion", motionVectorImage);
++        rawCaptureSlot->copy(context, "linear_depth", linearDepthImage);
++        rawCaptureSlot->copy(context, "specular_depth", specularHitDepthImage);
++        rawCaptureSlot->copy(context, "direct", firstHitDiffuseDirectLightImage);
++        rawCaptureSlot->copy(context, "indirect", firstHitDiffuseIndirectLightImage);
++        rawCaptureSlot->copy(context, "specular", firstHitSpecularImage);
++        rawCaptureSlot->copy(context, "emission", firstHitBaseEmissionImage);
++        rawCaptureSlot->copy(context, "fog", fogImage);
++        rawCaptureSlot->copy(context, "primary_position", module->findTargetImage("primary_surface_cache", context->frameIndex), 0);
++        rawCaptureSlot->copy(context, "primary_geometry", module->findTargetImage("primary_surface_cache", context->frameIndex), 3);
++        rawCaptureSlot->copy(context, "primary_state", module->findTargetImage("primary_ray_state", context->frameIndex), 0, 4);
++        rawCaptureSlot->copy(context, "reconstruction", module->findTargetImage("indirect_reconstruction", context->frameIndex), 0, 2);
++        rawCaptureSlot->copy(context, "indirect_surface", module->findTargetImage("indirect_surface", context->frameIndex), 0, 2);
++        rawCaptureSlot->finish(context);
++    }
++
+ 
+     for (auto &[name, value] : module->globalVariables_) {
+         auto iter = variables.find(name);
+--- a/src/core/render/modules/world/ray_tracing/ray_tracing_module.hpp
++++ b/src/core/render/modules/world/ray_tracing/ray_tracing_module.hpp
+@@ -27,6 +27,7 @@
+ struct WorldModuleContext;
+ 
+ struct RayTracingModuleContext;
++namespace mcvr_raw_capture { class Slot; }
+ 
+ class WorldPrepare;
+ struct WorldPrepareContext;
+@@ -282,6 +283,7 @@
+     std::shared_ptr<vk::DeviceLocalImage> firstHitRefractionImage;
+ 
+     std::shared_ptr<WorldPrepareContext> worldPrepareContext;
++    std::shared_ptr<mcvr_raw_capture::Slot> rawCaptureSlot;
+ 
+     RayTracingModuleContext(std::shared_ptr<FrameworkContext> frameworkContext,
+                             std::shared_ptr<WorldPipelineContext> worldPipelineContext,
+--- /dev/null
++++ b/src/core/util/raw_ray_capture.hpp
+@@ -0,0 +1,197 @@
++#pragma once
++// Private diagnostic: exact pre-RR image readback. Never used for performance claims.
++#include "core/render/render_framework.hpp"
++#include "core/vulkan/vma.hpp"
++#include <nlohmann/json.hpp>
++#include <chrono>
++#include <cstdlib>
++#include <filesystem>
++#include <fstream>
++#include <stdexcept>
++#include <vector>
++
++namespace mcvr_raw_capture {
++using Json = nlohmann::json;
++
++inline void checked(VkResult result, const char *operation) {
++    if (result != VK_SUCCESS) { throw std::runtime_error(std::string(operation) + ": " + std::to_string(result)); }
++}
++
++inline const std::filesystem::path &directory() {
++    static const auto path = [] {
++        const char *value = std::getenv("MCVR_RAW_CAPTURE_DIR");
++        std::filesystem::path result = value ? value : "";
++        if (!result.empty() && !result.is_absolute()) { throw std::runtime_error("Raw capture directory must be absolute"); }
++        return result;
++    }();
++    return path;
++}
++
++class Readback final : public vk::Buffer {
++  public:
++    Readback(std::shared_ptr<FrameworkContext> context, size_t bytes)
++        : vma_(context->vma), device_(context->device), bytes_(bytes) {
++        VkBufferCreateInfo info{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
++        info.size = bytes;
++        info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
++        VmaAllocationCreateInfo allocationInfo{};
++        allocationInfo.usage = VMA_MEMORY_USAGE_AUTO;
++        allocationInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
++        checked(vmaCreateBuffer(vma_->allocator(), &info, &allocationInfo, &buffer_, &allocation_, &info_), "raw readback allocation");
++        if (!info_.pMappedData) {
++            vmaDestroyBuffer(vma_->allocator(), buffer_, allocation_);
++            throw std::runtime_error("Raw readback is not mapped");
++        }
++        vmaGetAllocationMemoryProperties(vma_->allocator(), allocation_, &memoryFlags);
++    }
++    ~Readback() { vmaDestroyBuffer(vma_->allocator(), buffer_, allocation_); }
++    size_t size() override { return bytes_; }
++    VkBuffer &vkBuffer() override { return buffer_; }
++    void write(const std::filesystem::path &path) {
++        checked(vmaInvalidateAllocation(vma_->allocator(), allocation_, 0, bytes_), "raw invalidate");
++        std::ofstream file(path, std::ios::binary | std::ios::trunc);
++        file.exceptions(std::ios::badbit | std::ios::failbit);
++        file.write(static_cast<const char *>(info_.pMappedData), static_cast<std::streamsize>(bytes_));
++        file.close();
++    }
++    VkMemoryPropertyFlags memoryFlags = 0;
++  private:
++    std::shared_ptr<vk::VMA> vma_;
++    std::shared_ptr<vk::Device> device_;
++    size_t bytes_;
++    VkBuffer buffer_ = VK_NULL_HANDLE;
++    VmaAllocation allocation_ = VK_NULL_HANDLE;
++    VmaAllocationInfo info_{};
++};
++
++class Slot {
++  public:
++    void begin(std::shared_ptr<FrameworkContext> context, const vk::Data::WorldUBO &ubo) {
++        // Framework::acquireContext already waited on this resource slot's fence.
++        // Check it again before touching mapped data; never infer completion from time.
++        if (!entries_.empty()) {
++            checked(vkGetFenceStatus(context->device->vkDevice(), context->commandFinishedFence->vkFence()), "raw slot fence");
++            for (const auto &entry : entries_) { entry.buffer->write(destination_ / entry.file); }
++            metadata_["gpu_fence_confirmed"] = true;
++            std::ofstream file(destination_ / "manifest.json.tmp");
++            file.exceptions(std::ios::badbit | std::ios::failbit);
++            file << metadata_.dump(2) << '\n';
++            file.close();
++            std::filesystem::rename(destination_ / "manifest.json.tmp", destination_ / "manifest.json");
++            std::cerr << "[Raw Capture] completed " << destination_.filename().string() << std::endl;
++            entries_.clear();
++            sentinels_.clear();
++        }
++        armed_ = false;
++        static uint64_t frame = 0;
++        ++frame;
++        const auto request = directory() / "request.json";
++        if (!std::filesystem::exists(request)) { return; }
++        if (std::filesystem::file_size(request) > 4096) { throw std::runtime_error("Oversized raw capture request"); }
++        std::ifstream stream(request);
++        const auto json = Json::parse(stream);
++        const std::string id = json.at("id").get<std::string>();
++        if (id.empty() || id.size() > 48 || id.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_") != std::string::npos) {
++            throw std::runtime_error("Invalid raw capture id");
++        }
++        destination_ = directory() / id;
++        if (!std::filesystem::create_directory(destination_)) { throw std::runtime_error("Raw capture id already exists"); }
++        std::filesystem::rename(request, destination_ / "request.json");
++        width_ = ubo.renderSizePacked & 0xffffu;
++        height_ = ubo.renderSizePacked >> 16u;
++        metadata_ = {{"id", id}, {"frame", frame}, {"slot", context->frameIndex}, {"seed", ubo.seed},
++                     {"render_size_packed", ubo.renderSizePacked}, {"capture_steady_ns", std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()},
++                     {"camera", {ubo.cameraPos.x, ubo.cameraPos.y, ubo.cameraPos.z}},
++                     {"jitter", {ubo.cameraJitter.x, ubo.cameraJitter.y}}, {"images", Json::array()}};
++        metadata_["view_column_major"] = Json::array();
++        for (int c = 0; c < 4; ++c) for (int r = 0; r < 4; ++r) {
++            metadata_["view_column_major"].push_back(ubo.cameraEffectedViewMat[c][r]);
++        }
++        armed_ = true;
++    }
++
++    bool armed() const { return armed_; }
++
++    void copy(std::shared_ptr<FrameworkContext> context, const std::string &name,
++              std::shared_ptr<vk::DeviceLocalImage> image, uint32_t firstLayer = 0, uint32_t layerCount = 1) {
++        if (!armed_ || !image) { return; }
++        if (image->depth() != 1 || firstLayer + layerCount > image->layer() || layerCount == 0) {
++            throw std::runtime_error("Unsupported raw image extent");
++        }
++        const uint32_t width = width_ ? std::min(width_, image->width()) : image->width();
++        const uint32_t height = height_ ? std::min(height_, image->height()) : image->height();
++        const size_t texelBytes = vk::formatToByte(image->vkFormat());
++        const size_t bytes = size_t(width) * height * layerCount * texelBytes;
++        if (!bytes || bytes > 256ull * 1024 * 1024) { throw std::runtime_error("Invalid raw image size"); }
++        auto buffer = std::make_shared<Readback>(context, bytes);
++        auto command = context->worldCommandBuffer;
++        const VkImageLayout originalLayout = image->imageLayout();
++        command->barriersBufferImage({}, {{
++            .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
++            .srcAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
++            .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
++            .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
++            .oldLayout = originalLayout, .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
++            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
++            .image = image, .subresourceRange = image->fullSubresourceRange()}});
++        VkBufferImageCopy region{};
++        region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, firstLayer, layerCount};
++        region.imageExtent = {width, height, 1};
++        vkCmdCopyImageToBuffer(command->vkCommandBuffer(), image->vkImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
++                               buffer->vkBuffer(), 1, &region);
++        command->barriersBufferImage({{
++            .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT, .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
++            .dstStageMask = VK_PIPELINE_STAGE_2_HOST_BIT, .dstAccessMask = VK_ACCESS_2_HOST_READ_BIT,
++            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
++            .buffer = buffer}}, {{
++            .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT, .srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
++            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
++            .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
++            .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, .newLayout = originalLayout,
++            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
++            .image = image, .subresourceRange = image->fullSubresourceRange()}});
++        const std::string filename = name + ".bin";
++        entries_.push_back({filename, buffer});
++        metadata_["images"].push_back({{"name", name}, {"file", filename}, {"format", image->vkFormat()},
++                                       {"width", width}, {"height", height}, {"first_layer", firstLayer},
++                                       {"layers", layerCount}, {"bytes", bytes}, {"memory_flags", buffer->memoryFlags}});
++    }
++
++    void finish(std::shared_ptr<FrameworkContext> context) {
++        if (!armed_) { return; }
++        // Known two-layer images verify channel, row and array-layer decoding.
++        for (auto format : {VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT, VK_FORMAT_R8G8B8A8_UNORM}) {
++            auto image = vk::DeviceLocalImage::create(context->device, context->vma, false, 3u, 2u, 2u, format, VK_IMAGE_USAGE_STORAGE_BIT);
++            auto command = context->worldCommandBuffer;
++            command->barriersBufferImage({}, {{
++                .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, .srcAccessMask = 0,
++                .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT, .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
++                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED, .newLayout = VK_IMAGE_LAYOUT_GENERAL,
++                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
++                .image = image, .subresourceRange = image->fullSubresourceRange()}});
++            image->imageLayout() = VK_IMAGE_LAYOUT_GENERAL;
++            for (uint32_t layer = 0; layer < 2; ++layer) {
++                VkClearColorValue color{};
++                color.float32[0] = layer ? 0.75f : 1.0f;
++                color.float32[1] = layer ? 0.25f : 0.5f;
++                color.float32[2] = layer ? 0.5f : 0.25f;
++                color.float32[3] = layer ? 0.0f : 1.0f;
++                VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, layer, 1};
++                vkCmdClearColorImage(command->vkCommandBuffer(), image->vkImage(), VK_IMAGE_LAYOUT_GENERAL, &color, 1, &range);
++            }
++            copy(context, "sentinel_" + std::to_string(format), image, 0, 2);
++            sentinels_.push_back(image);
++        }
++        armed_ = false;
++    }
++
++  private:
++    struct Entry { std::string file; std::shared_ptr<Readback> buffer; };
++    bool armed_ = false;
++    uint32_t width_ = 0, height_ = 0;
++    std::filesystem::path destination_;
++    Json metadata_;
++    std::vector<Entry> entries_;
++    std::vector<std::shared_ptr<vk::DeviceLocalImage>> sentinels_;
++};
++} // namespace mcvr_raw_capture

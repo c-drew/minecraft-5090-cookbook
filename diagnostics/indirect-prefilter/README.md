@@ -51,6 +51,11 @@ regression has not been conclusively established. In particular, the identity
 control cannot prove every intermediate arithmetic operation executes, because
 the compiler can simplify it.
 
+Follow-up [raw GPU readbacks and CPU replay](../raw-light/README.md) now verify
+the actual loader/kernel arithmetic within floating-point tolerance. They
+quantify how this filter spreads sparse bright samples into more pixels;
+the integrated visual regression remains decisive.
+
 ## Validation and its limits
 
 All three radius variants and the displaced-surface variant compile 174/174

@@ -1,0 +1,2062 @@
+{
+  "date": "2026-09-27",
+  "installed_jar": "e54e3c58c21c1539f777c6cbb6582bd342549a8c16ba44f98d9760973da7f0a0",
+  "normal_install_changed": false,
+  "performance_measurement": false,
+  "readback_candidates": {
+    "native_sha256": "78c53038171756cc9325c242b3dba885fac98af05090f58879479ae8df460fde",
+    "variants": [
+      {
+        "label": "r0",
+        "jar": "Radiance-raw-light-r0.jar",
+        "sha256": "f4232eb6eddd89dee5bdc512923a32596b8b8b694dcdb34258f92f36d101ba05",
+        "base_sha256": "cae9ff8c26d2be77e56e33dbc8961c784698863deb0903f266633f53a3e47ffc"
+      },
+      {
+        "label": "r1",
+        "jar": "Radiance-raw-light-r1.jar",
+        "sha256": "7e95827c198f09fc50c24c8509cdfc46dfaf58c187aacc0907db6e5ac9038b39",
+        "base_sha256": "69f64cf8827611f6753f4df7c582a667a61a9a0a1b4de50b75b6029d9834fbf3"
+      }
+    ],
+    "production_sources_restored": true
+  },
+  "r0_validation": [
+    {
+      "id": "idle",
+      "frame": 4499,
+      "sentinels": [
+        {
+          "format": 97,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 109,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 37,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0019607841968536377,
+          "passed": true
+        }
+      ],
+      "hdr_exact_identity": true,
+      "hdr_nonfinite_before": 0,
+      "hdr_nonfinite_after": 0,
+      "eligible_pixels": 218306,
+      "eligible_nonfinite_pixels": 0,
+      "negative_remainder_pixels": 0,
+      "raw_luminance_quantiles": {
+        "0": 0.0,
+        "50": 9.98959512799047e-06,
+        "90": 0.00044057759805582464,
+        "99": 0.004812362603843212,
+        "99.9": 0.8336551189422607,
+        "99.99": 1.9494564533233643,
+        "100": 2.7906625270843506
+      },
+      "max_absolute_hdr_delta": 0.0,
+      "negative_remainder_min_rgb": [
+        -0.000820159912109375,
+        -0.000823974609375,
+        -0.0002579689025878906
+      ]
+    },
+    {
+      "id": "return-settled",
+      "frame": 5467,
+      "sentinels": [
+        {
+          "format": 97,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 109,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 37,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0019607841968536377,
+          "passed": true
+        }
+      ],
+      "hdr_exact_identity": true,
+      "hdr_nonfinite_before": 0,
+      "hdr_nonfinite_after": 0,
+      "eligible_pixels": 228593,
+      "eligible_nonfinite_pixels": 0,
+      "negative_remainder_pixels": 0,
+      "raw_luminance_quantiles": {
+        "0": 0.0,
+        "50": 1.1238860679441132e-05,
+        "90": 0.000511864316649735,
+        "99": 0.0046292683109641075,
+        "99.9": 0.9264887571334839,
+        "99.99": 1.9297714233398438,
+        "100": 2.434000015258789
+      },
+      "max_absolute_hdr_delta": 0.0,
+      "negative_remainder_min_rgb": [
+        -0.00044155120849609375,
+        -0.0004677772521972656,
+        -0.0004525184631347656
+      ]
+    },
+    {
+      "id": "turn-early",
+      "frame": 4581,
+      "sentinels": [
+        {
+          "format": 97,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 109,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 37,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0019607841968536377,
+          "passed": true
+        }
+      ],
+      "hdr_exact_identity": true,
+      "hdr_nonfinite_before": 0,
+      "hdr_nonfinite_after": 0,
+      "eligible_pixels": 491739,
+      "eligible_nonfinite_pixels": 0,
+      "negative_remainder_pixels": 0,
+      "raw_luminance_quantiles": {
+        "0": 0.0,
+        "50": 0.0,
+        "90": 0.000816923682577908,
+        "99": 0.01843896135687828,
+        "99.9": 2.5718164443969727,
+        "99.99": 4.662798881530762,
+        "100": 12.246700286865234
+      },
+      "max_absolute_hdr_delta": 0.0,
+      "negative_remainder_min_rgb": [
+        -0.001438140869140625,
+        -0.0014801025390625,
+        -0.0006198883056640625
+      ]
+    },
+    {
+      "id": "turn-settled",
+      "frame": 4988,
+      "sentinels": [
+        {
+          "format": 97,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 109,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 37,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0019607841968536377,
+          "passed": true
+        }
+      ],
+      "hdr_exact_identity": true,
+      "hdr_nonfinite_before": 0,
+      "hdr_nonfinite_after": 0,
+      "eligible_pixels": 499140,
+      "eligible_nonfinite_pixels": 0,
+      "negative_remainder_pixels": 0,
+      "raw_luminance_quantiles": {
+        "0": 0.0,
+        "50": 5.907100330659887e-06,
+        "90": 0.0014167891349643469,
+        "99": 0.014747699722647667,
+        "99.9": 2.739030122756958,
+        "99.99": 4.795080661773682,
+        "100": 8.081182479858398
+      },
+      "max_absolute_hdr_delta": 0.0,
+      "negative_remainder_min_rgb": [
+        -0.0035552978515625,
+        -0.0009374618530273438,
+        -0.0009784698486328125
+      ]
+    }
+  ],
+  "r1_validation": [
+    {
+      "id": "idle",
+      "frame": 4521,
+      "sentinels": [
+        {
+          "format": 97,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 109,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 37,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0019607841968536377,
+          "passed": true
+        }
+      ],
+      "hdr_exact_identity": false,
+      "hdr_nonfinite_before": 0,
+      "hdr_nonfinite_after": 0,
+      "eligible_pixels": 218251,
+      "eligible_nonfinite_pixels": 0,
+      "negative_remainder_pixels": 0,
+      "raw_luminance_quantiles": {
+        "0": 0.0,
+        "50": 1.013847577269189e-05,
+        "90": 0.0004147147119510919,
+        "99": 0.004352400545030832,
+        "99.9": 0.8271483182907104,
+        "99.99": 1.924626350402832,
+        "100": 2.5364532470703125
+      },
+      "max_absolute_hdr_delta": 3.0,
+      "negative_remainder_min_rgb": [
+        -0.000408172607421875,
+        -0.0004649162292480469,
+        -0.0009508132934570312
+      ]
+    },
+    {
+      "id": "return-settled",
+      "frame": 5482,
+      "sentinels": [
+        {
+          "format": 97,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 109,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 37,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0019607841968536377,
+          "passed": true
+        }
+      ],
+      "hdr_exact_identity": false,
+      "hdr_nonfinite_before": 0,
+      "hdr_nonfinite_after": 0,
+      "eligible_pixels": 228483,
+      "eligible_nonfinite_pixels": 0,
+      "negative_remainder_pixels": 0,
+      "raw_luminance_quantiles": {
+        "0": 0.0,
+        "50": 1.185445853479905e-05,
+        "90": 0.0005215060082264245,
+        "99": 0.004779619164764881,
+        "99.9": 0.7791731357574463,
+        "99.99": 1.9196422100067139,
+        "100": 3.003493309020996
+      },
+      "max_absolute_hdr_delta": 2.3095703125,
+      "negative_remainder_min_rgb": [
+        -0.0004749298095703125,
+        -0.000896453857421875,
+        -0.0004520416259765625
+      ]
+    },
+    {
+      "id": "turn-early",
+      "frame": 4602,
+      "sentinels": [
+        {
+          "format": 97,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 109,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 37,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0019607841968536377,
+          "passed": true
+        }
+      ],
+      "hdr_exact_identity": false,
+      "hdr_nonfinite_before": 0,
+      "hdr_nonfinite_after": 0,
+      "eligible_pixels": 491815,
+      "eligible_nonfinite_pixels": 0,
+      "negative_remainder_pixels": 0,
+      "raw_luminance_quantiles": {
+        "0": 0.0,
+        "50": 0.0,
+        "90": 0.0006503045442514122,
+        "99": 0.019529635086655617,
+        "99.9": 2.7633650302886963,
+        "99.99": 4.672406196594238,
+        "100": 8.336881637573242
+      },
+      "max_absolute_hdr_delta": 7.568359375,
+      "negative_remainder_min_rgb": [
+        -0.0019378662109375,
+        -0.0019207000732421875,
+        -0.001712799072265625
+      ]
+    },
+    {
+      "id": "turn-settled",
+      "frame": 5005,
+      "sentinels": [
+        {
+          "format": 97,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 109,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 37,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0019607841968536377,
+          "passed": true
+        }
+      ],
+      "hdr_exact_identity": false,
+      "hdr_nonfinite_before": 0,
+      "hdr_nonfinite_after": 0,
+      "eligible_pixels": 499242,
+      "eligible_nonfinite_pixels": 0,
+      "negative_remainder_pixels": 0,
+      "raw_luminance_quantiles": {
+        "0": 0.0,
+        "50": 5.7044208006118424e-06,
+        "90": 0.00143092789221555,
+        "99": 0.0151144964620471,
+        "99.9": 2.6293482780456543,
+        "99.99": 4.634271621704102,
+        "100": 9.328973770141602
+      },
+      "max_absolute_hdr_delta": 6.7890625,
+      "negative_remainder_min_rgb": [
+        -0.0019474029541015625,
+        -0.0009136199951171875,
+        -0.0009307861328125
+      ]
+    }
+  ],
+  "r1_cpu_replay": [
+    {
+      "id": "idle",
+      "shape": [
+        750,
+        1334,
+        3
+      ],
+      "eligible_loader_pixels": 218251,
+      "written_pixels": 218251,
+      "unexpected_pixels": 0,
+      "fraction_exact_half_channels": 0.8970501415958687,
+      "max_error": 0.0009765625,
+      "mean_error": 6.441629238906899e-07,
+      "bright_sample_spread": [
+        {
+          "threshold": 0.1,
+          "raw_indirect_bright_pixels": 473,
+          "filtered_indirect_bright_pixels": 1570,
+          "new_bright_pixels": 1197
+        },
+        {
+          "threshold": 0.5,
+          "raw_indirect_bright_pixels": 302,
+          "filtered_indirect_bright_pixels": 33,
+          "new_bright_pixels": 1
+        },
+        {
+          "threshold": 1,
+          "raw_indirect_bright_pixels": 204,
+          "filtered_indirect_bright_pixels": 2,
+          "new_bright_pixels": 0
+        },
+        {
+          "threshold": 2,
+          "raw_indirect_bright_pixels": 15,
+          "filtered_indirect_bright_pixels": 0,
+          "new_bright_pixels": 0
+        }
+      ],
+      "mean_hdr_luminance_before": 0.020992837846279144,
+      "mean_hdr_luminance_after": 0.020995642989873886,
+      "mean_raw_indirect_eligible": 0.0022627590224146843,
+      "mean_filtered_indirect_eligible": 0.0022789344657212496
+    },
+    {
+      "id": "return-settled",
+      "shape": [
+        750,
+        1334,
+        3
+      ],
+      "eligible_loader_pixels": 228483,
+      "written_pixels": 228483,
+      "unexpected_pixels": 0,
+      "fraction_exact_half_channels": 0.8917501249375313,
+      "max_error": 0.0009765625,
+      "mean_error": 6.919266866134421e-07,
+      "bright_sample_spread": [
+        {
+          "threshold": 0.1,
+          "raw_indirect_bright_pixels": 497,
+          "filtered_indirect_bright_pixels": 1589,
+          "new_bright_pixels": 1214
+        },
+        {
+          "threshold": 0.5,
+          "raw_indirect_bright_pixels": 302,
+          "filtered_indirect_bright_pixels": 39,
+          "new_bright_pixels": 2
+        },
+        {
+          "threshold": 1,
+          "raw_indirect_bright_pixels": 198,
+          "filtered_indirect_bright_pixels": 1,
+          "new_bright_pixels": 0
+        },
+        {
+          "threshold": 2,
+          "raw_indirect_bright_pixels": 13,
+          "filtered_indirect_bright_pixels": 0,
+          "new_bright_pixels": 0
+        }
+      ],
+      "mean_hdr_luminance_before": 0.020695388317108154,
+      "mean_hdr_luminance_after": 0.020697375759482384,
+      "mean_raw_indirect_eligible": 0.0022343804594129324,
+      "mean_filtered_indirect_eligible": 0.0022464932408183813
+    },
+    {
+      "id": "turn-early",
+      "shape": [
+        750,
+        1334,
+        3
+      ],
+      "eligible_loader_pixels": 491815,
+      "written_pixels": 491815,
+      "unexpected_pixels": 0,
+      "fraction_exact_half_channels": 0.7917651174412793,
+      "max_error": 0.00390625,
+      "mean_error": 7.202172582765343e-06,
+      "bright_sample_spread": [
+        {
+          "threshold": 0.1,
+          "raw_indirect_bright_pixels": 2915,
+          "filtered_indirect_bright_pixels": 15233,
+          "new_bright_pixels": 12553
+        },
+        {
+          "threshold": 0.5,
+          "raw_indirect_bright_pixels": 2534,
+          "filtered_indirect_bright_pixels": 1950,
+          "new_bright_pixels": 764
+        },
+        {
+          "threshold": 1,
+          "raw_indirect_bright_pixels": 2009,
+          "filtered_indirect_bright_pixels": 248,
+          "new_bright_pixels": 18
+        },
+        {
+          "threshold": 2,
+          "raw_indirect_bright_pixels": 913,
+          "filtered_indirect_bright_pixels": 5,
+          "new_bright_pixels": 0
+        }
+      ],
+      "mean_hdr_luminance_before": 0.08405784517526627,
+      "mean_hdr_luminance_after": 0.08404774963855743,
+      "mean_raw_indirect_eligible": 0.010491530410945415,
+      "mean_filtered_indirect_eligible": 0.010488043539226055
+    },
+    {
+      "id": "turn-settled",
+      "shape": [
+        750,
+        1334,
+        3
+      ],
+      "eligible_loader_pixels": 499242,
+      "written_pixels": 499242,
+      "unexpected_pixels": 0,
+      "fraction_exact_half_channels": 0.7823118440779611,
+      "max_error": 0.001953125,
+      "mean_error": 7.1088174991018604e-06,
+      "bright_sample_spread": [
+        {
+          "threshold": 0.1,
+          "raw_indirect_bright_pixels": 2989,
+          "filtered_indirect_bright_pixels": 15924,
+          "new_bright_pixels": 13107
+        },
+        {
+          "threshold": 0.5,
+          "raw_indirect_bright_pixels": 2667,
+          "filtered_indirect_bright_pixels": 1865,
+          "new_bright_pixels": 721
+        },
+        {
+          "threshold": 1,
+          "raw_indirect_bright_pixels": 2109,
+          "filtered_indirect_bright_pixels": 218,
+          "new_bright_pixels": 21
+        },
+        {
+          "threshold": 2,
+          "raw_indirect_bright_pixels": 892,
+          "filtered_indirect_bright_pixels": 10,
+          "new_bright_pixels": 0
+        }
+      ],
+      "mean_hdr_luminance_before": 0.08423186838626862,
+      "mean_hdr_luminance_after": 0.08422622829675674,
+      "mean_raw_indirect_eligible": 0.010662038810551167,
+      "mean_filtered_indirect_eligible": 0.010667317546904087
+    }
+  ],
+  "source_candidate": {
+    "jar": "Radiance-raw-light-sources.jar",
+    "sha256": "162dc003017630c6a0b589da12a55ee71155f319713658baa0c771b5833b2934",
+    "base_sha256": "f4232eb6eddd89dee5bdc512923a32596b8b8b694dcdb34258f92f36d101ba05",
+    "changed_shader_entries": [
+      "configs.json",
+      "world/world.rgen"
+    ]
+  },
+  "source_attribution": [
+    {
+      "id": "idle",
+      "eligible_pixels": 217998,
+      "component_sum_mismatch_pixels": 0,
+      "max_sum_error": 0.0015299320220947266,
+      "mean_luminance": 0.002121138619259,
+      "component_mean": {
+        "hit_direct": 0.0,
+        "hit_other": 0.0013859427043659506,
+        "cached": 0.0007358847809547911,
+        "miss": 0.0
+      },
+      "thresholds": [
+        {
+          "threshold": 0.001,
+          "count": 10106,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 198,
+            "cached": 9908,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 302.1327376663685,
+            "cached": 143.67238981805045,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 198,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 8731,
+            "1": 1375,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.106801152229309
+        },
+        {
+          "threshold": 0.1,
+          "count": 441,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 198,
+            "cached": 243,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 302.1327376663685,
+            "cached": 109.96447575946573,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 198,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 392,
+            "1": 49,
+            "2": 0
+          },
+          "max_incoming_throughput": 0.6332410573959351
+        },
+        {
+          "threshold": 0.5,
+          "count": 276,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 197,
+            "cached": 79,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 301.7329638004303,
+            "cached": 56.24558114800371,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 197,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 252,
+            "1": 24,
+            "2": 0
+          },
+          "max_incoming_throughput": 0.6332410573959351
+        },
+        {
+          "threshold": 1,
+          "count": 193,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 185,
+            "cached": 8,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 290.8933823108673,
+            "cached": 10.233760426869736,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 185,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 182,
+            "1": 11,
+            "2": 0
+          },
+          "max_incoming_throughput": 0.6332410573959351
+        },
+        {
+          "threshold": 2,
+          "count": 11,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 11,
+            "cached": 0,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 25.78843867778778,
+            "cached": 0.22551566350011854,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 11,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 11,
+            "1": 0,
+            "2": 0
+          },
+          "max_incoming_throughput": 0.5355972051620483
+        }
+      ]
+    },
+    {
+      "id": "return-settled",
+      "eligible_pixels": 228465,
+      "component_sum_mismatch_pixels": 0,
+      "max_sum_error": 0.003199338912963867,
+      "mean_luminance": 0.0025247191078960896,
+      "component_mean": {
+        "hit_direct": 0.0,
+        "hit_other": 0.0016488399938799976,
+        "cached": 0.0008767763020060338,
+        "miss": 0.0
+      },
+      "thresholds": [
+        {
+          "threshold": 0.001,
+          "count": 12959,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 239,
+            "cached": 12720,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 376.70222920179367,
+            "cached": 181.4018258225629,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 239,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 11186,
+            "1": 1773,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.133927583694458
+        },
+        {
+          "threshold": 0.1,
+          "count": 552,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 239,
+            "cached": 313,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 376.70222920179367,
+            "cached": 141.37392185234836,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 239,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 492,
+            "1": 60,
+            "2": 0
+          },
+          "max_incoming_throughput": 0.8244777321815491
+        },
+        {
+          "threshold": 0.5,
+          "count": 342,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 238,
+            "cached": 104,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 376.42420744895935,
+            "cached": 71.17687521817452,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 238,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 307,
+            "1": 35,
+            "2": 0
+          },
+          "max_incoming_throughput": 0.8244777321815491
+        },
+        {
+          "threshold": 1,
+          "count": 233,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 226,
+            "cached": 7,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 365.7779859304428,
+            "cached": 9.220214907676834,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 226,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 207,
+            "1": 26,
+            "2": 0
+          },
+          "max_incoming_throughput": 0.6858633160591125
+        },
+        {
+          "threshold": 2,
+          "count": 25,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 25,
+            "cached": 0,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 58.159215331077576,
+            "cached": 0.5084519146003004,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 25,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 21,
+            "1": 4,
+            "2": 0
+          },
+          "max_incoming_throughput": 0.6858633160591125
+        }
+      ]
+    },
+    {
+      "id": "turn-early",
+      "eligible_pixels": 491791,
+      "component_sum_mismatch_pixels": 0,
+      "max_sum_error": 0.006884574890136719,
+      "mean_luminance": 0.010625410825014114,
+      "component_mean": {
+        "hit_direct": 0.0,
+        "hit_other": 0.008369486199763857,
+        "cached": 0.002259632737318983,
+        "miss": 3.2970028954960766e-08
+      },
+      "thresholds": [
+        {
+          "threshold": 0.001,
+          "count": 41080,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 1859,
+            "cached": 39219,
+            "miss": 2
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 4116.037987668067,
+            "cached": 1081.1690642639583,
+            "miss": 0.01621436350978911
+          },
+          "emissive_hit_pixels": 1859,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 35591,
+            "1": 5489,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.7673394680023193
+        },
+        {
+          "threshold": 0.1,
+          "count": 2948,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 1854,
+            "cached": 1094,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 4115.72254383564,
+            "cached": 853.789865945324,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 1854,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 2621,
+            "1": 327,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.6758149862289429
+        },
+        {
+          "threshold": 0.5,
+          "count": 2555,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 1849,
+            "cached": 706,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 4114.735697627068,
+            "cached": 739.3074082270123,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 1849,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 2298,
+            "1": 257,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.6758149862289429
+        },
+        {
+          "threshold": 1,
+          "count": 2047,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 1777,
+            "cached": 270,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 4049.897011399269,
+            "cached": 420.8988370126854,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 1777,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 1852,
+            "1": 195,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.6758149862289429
+        },
+        {
+          "threshold": 2,
+          "count": 909,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 882,
+            "cached": 27,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 2660.034842133522,
+            "cached": 86.17316815619702,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 882,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 802,
+            "1": 107,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.6758149862289429
+        }
+      ]
+    },
+    {
+      "id": "turn-settled",
+      "eligible_pixels": 499114,
+      "component_sum_mismatch_pixels": 0,
+      "max_sum_error": 0.007197380065917969,
+      "mean_luminance": 0.01023719273507595,
+      "component_mean": {
+        "hit_direct": 0.0,
+        "hit_other": 0.007979184287546901,
+        "cached": 0.0022615869112684334,
+        "miss": 1.7001142181130623e-09
+      },
+      "thresholds": [
+        {
+          "threshold": 0.001,
+          "count": 58892,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 1798,
+            "cached": 57094,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 3982.522586494684,
+            "cached": 1096.443623751311,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 1798,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 50863,
+            "1": 8029,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.680725336074829
+        },
+        {
+          "threshold": 0.1,
+          "count": 2839,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 1796,
+            "cached": 1043,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 3982.4339622333646,
+            "cached": 845.9480728618619,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 1796,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 2521,
+            "1": 318,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.5473603010177612
+        },
+        {
+          "threshold": 0.5,
+          "count": 2519,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 1788,
+            "cached": 731,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 3981.3288546800613,
+            "cached": 740.3784363786956,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 1788,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 2269,
+            "1": 250,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.5473603010177612
+        },
+        {
+          "threshold": 1,
+          "count": 1984,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 1723,
+            "cached": 261,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 3922.5598233938217,
+            "cached": 396.766417729508,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 1723,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 1816,
+            "1": 168,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.5473603010177612
+        },
+        {
+          "threshold": 2,
+          "count": 857,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 831,
+            "cached": 26,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 2531.783068537712,
+            "cached": 74.26724052747122,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 831,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 763,
+            "1": 94,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.5473603010177612
+        }
+      ]
+    }
+  ],
+  "bounce_candidate": {
+    "jar": "Radiance-raw-light-bounces.jar",
+    "sha256": "6adf90f6b5a5e9a91cb289b6b685b7b35c1c527459846f472c96c0dcceaa1384",
+    "base_sha256": "f4232eb6eddd89dee5bdc512923a32596b8b8b694dcdb34258f92f36d101ba05",
+    "changed_shader_entries": [
+      "configs.json",
+      "world/world.rgen"
+    ]
+  },
+  "bounce_attribution": [
+    {
+      "id": "idle",
+      "eligible_pixels": 218203,
+      "component_sum_mismatch_pixels": 0,
+      "max_sum_error": 0.0015718936920166016,
+      "mean_luminance": 0.0022082366049289703,
+      "component_mean": {
+        "hit_direct": 0.0,
+        "hit_other": 0.0014044183537213152,
+        "cached": 0.0008045747763932384,
+        "miss": 0.0
+      },
+      "thresholds": [
+        {
+          "threshold": 0.001,
+          "count": 10543,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 191,
+            "cached": 10352,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 306.44829803705215,
+            "cached": 159.24881395477234,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 305.9620313644409,
+          "later_hit_other_sum": 0.4862666726112366,
+          "first_emissive_hit_pixels": 190
+        },
+        {
+          "threshold": 0.1,
+          "count": 462,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 191,
+            "cached": 271,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 306.44829803705215,
+            "cached": 124.18395461061402,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 305.9620313644409,
+          "later_hit_other_sum": 0.4862666726112366,
+          "first_emissive_hit_pixels": 190
+        },
+        {
+          "threshold": 0.5,
+          "count": 280,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 190,
+            "cached": 90,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 305.9620313644409,
+            "cached": 62.823356195477686,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 305.9620313644409,
+          "later_hit_other_sum": 0.0,
+          "first_emissive_hit_pixels": 190
+        },
+        {
+          "threshold": 1,
+          "count": 193,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 184,
+            "cached": 9,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 300.3434156179428,
+            "cached": 11.256448422794278,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 300.3434156179428,
+          "later_hit_other_sum": 0.0,
+          "first_emissive_hit_pixels": 184
+        },
+        {
+          "threshold": 2,
+          "count": 11,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 11,
+            "cached": 0,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 25.87224507331848,
+            "cached": 0.1273594738013344,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 25.87224507331848,
+          "later_hit_other_sum": 0.0,
+          "first_emissive_hit_pixels": 11
+        }
+      ],
+      "bounce_split_mismatch_pixels": 0,
+      "first_hit_other_mean": 0.0014021898478226282,
+      "later_hit_other_mean": 2.2285058986871702e-06
+    },
+    {
+      "id": "return-settled",
+      "eligible_pixels": 228419,
+      "component_sum_mismatch_pixels": 0,
+      "max_sum_error": 0.0016329288482666016,
+      "mean_luminance": 0.0025548588018864393,
+      "component_mean": {
+        "hit_direct": 0.0,
+        "hit_other": 0.0016219206355436696,
+        "cached": 0.0009338566441837487,
+        "miss": 0.0
+      },
+      "thresholds": [
+        {
+          "threshold": 0.001,
+          "count": 12496,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 243,
+            "cached": 12253,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 370.4774896502495,
+            "cached": 194.55328369986205,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 368.06871742010117,
+          "later_hit_other_sum": 2.4087722301483154,
+          "first_emissive_hit_pixels": 240
+        },
+        {
+          "threshold": 0.1,
+          "count": 575,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 243,
+            "cached": 332,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 370.4774896502495,
+            "cached": 155.25162648358787,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 368.06871742010117,
+          "later_hit_other_sum": 2.4087722301483154,
+          "first_emissive_hit_pixels": 240
+        },
+        {
+          "threshold": 0.5,
+          "count": 362,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 243,
+            "cached": 119,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 370.4774896502495,
+            "cached": 83.93744149008238,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 368.06871742010117,
+          "later_hit_other_sum": 2.4087722301483154,
+          "first_emissive_hit_pixels": 240
+        },
+        {
+          "threshold": 1,
+          "count": 231,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 223,
+            "cached": 8,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 353.50513434410095,
+            "cached": 11.487428672740847,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 352.46474945545197,
+          "later_hit_other_sum": 1.0403848886489868,
+          "first_emissive_hit_pixels": 222
+        },
+        {
+          "threshold": 2,
+          "count": 20,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 20,
+            "cached": 0,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 46.85101079940796,
+            "cached": 0.12255061835833203,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 46.85101079940796,
+          "later_hit_other_sum": 0.0,
+          "first_emissive_hit_pixels": 20
+        }
+      ],
+      "bounce_split_mismatch_pixels": 0,
+      "first_hit_other_mean": 0.0016113752245658249,
+      "later_hit_other_mean": 1.0545410977844731e-05
+    },
+    {
+      "id": "turn-early",
+      "eligible_pixels": 492111,
+      "component_sum_mismatch_pixels": 0,
+      "max_sum_error": 0.0056629180908203125,
+      "mean_luminance": 0.009814978577196598,
+      "component_mean": {
+        "hit_direct": 0.0,
+        "hit_other": 0.007690494445640538,
+        "cached": 0.0021279136954474947,
+        "miss": 0.0
+      },
+      "thresholds": [
+        {
+          "threshold": 0.001,
+          "count": 46618,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 1757,
+            "cached": 44861,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 3784.576912138611,
+            "cached": 1017.0745159979755,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 3777.6921829022467,
+          "later_hit_other_sum": 6.884729236364365,
+          "first_emissive_hit_pixels": 1749
+        },
+        {
+          "threshold": 0.1,
+          "count": 2759,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 1753,
+            "cached": 1006,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 3784.3065483644605,
+            "cached": 764.321363471384,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 3777.421819128096,
+          "later_hit_other_sum": 6.884729236364365,
+          "first_emissive_hit_pixels": 1745
+        },
+        {
+          "threshold": 0.5,
+          "count": 2370,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 1743,
+            "cached": 627,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 3782.1556102633476,
+            "cached": 653.4942431575301,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 3776.396079480648,
+          "later_hit_other_sum": 5.759530782699585,
+          "first_emissive_hit_pixels": 1738
+        },
+        {
+          "threshold": 1,
+          "count": 1906,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 1676,
+            "cached": 230,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 3721.013039588928,
+            "cached": 368.88239479832896,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 3716.7472088336945,
+          "later_hit_other_sum": 4.265830755233765,
+          "first_emissive_hit_pixels": 1673
+        },
+        {
+          "threshold": 2,
+          "count": 808,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 778,
+            "cached": 30,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 2319.59303855896,
+            "cached": 86.56141588019108,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 2319.59303855896,
+          "later_hit_other_sum": 0.0,
+          "first_emissive_hit_pixels": 778
+        }
+      ],
+      "bounce_split_mismatch_pixels": 0,
+      "first_hit_other_mean": 0.007676504249858765,
+      "later_hit_other_mean": 1.3990195781773553e-05
+    },
+    {
+      "id": "turn-settled",
+      "eligible_pixels": 499044,
+      "component_sum_mismatch_pixels": 0,
+      "max_sum_error": 0.004046440124511719,
+      "mean_luminance": 0.010820064693689346,
+      "component_mean": {
+        "hit_direct": 1.358948567654099e-10,
+        "hit_other": 0.008570916807134874,
+        "cached": 0.0022528768103704188,
+        "miss": 6.11736860432525e-08
+      },
+      "thresholds": [
+        {
+          "threshold": 0.001,
+          "count": 59740,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 1963,
+            "cached": 57775,
+            "miss": 2
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 4277.264607099816,
+            "cached": 1091.802007642929,
+            "miss": 0.030528360977768898
+          },
+          "first_hit_other_sum": 4275.309406487271,
+          "later_hit_other_sum": 1.9552006125450134,
+          "first_emissive_hit_pixels": 1961
+        },
+        {
+          "threshold": 0.1,
+          "count": 3024,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 1961,
+            "cached": 1063,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 4277.168170504272,
+            "cached": 833.4445860561535,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 4275.212969891727,
+          "later_hit_other_sum": 1.9552006125450134,
+          "first_emissive_hit_pixels": 1959
+        },
+        {
+          "threshold": 0.5,
+          "count": 2691,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 1956,
+            "cached": 735,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 4276.579087138176,
+            "cached": 723.2149272118676,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 4274.623886525631,
+          "later_hit_other_sum": 1.9552006125450134,
+          "first_emissive_hit_pixels": 1954
+        },
+        {
+          "threshold": 1,
+          "count": 2116,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 1873,
+            "cached": 243,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 4200.855408906937,
+            "cached": 369.1375769239968,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 4200.855408906937,
+          "later_hit_other_sum": 0.0,
+          "first_emissive_hit_pixels": 1873
+        },
+        {
+          "threshold": 2,
+          "count": 913,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 889,
+            "cached": 24,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 2676.0155324935913,
+            "cached": 72.28947225597193,
+            "miss": 0.0
+          },
+          "first_hit_other_sum": 2676.0155324935913,
+          "later_hit_other_sum": 0.0,
+          "first_emissive_hit_pixels": 889
+        }
+      ],
+      "bounce_split_mismatch_pixels": 0,
+      "first_hit_other_mean": 0.00856699891489983,
+      "later_hit_other_mean": 3.91789223504343e-06
+    }
+  ],
+  "capture_hashes": {
+    "raw-light/r0/raw/idle/diffuse_albedo.bin": "3a31dd2054d7604ec9e3b572b15985ed9027b96abe2e93ac8dd32253382c506e",
+    "raw-light/r0/raw/idle/direct.bin": "d8010fafcd64f241d1f56bc66cc138420b43be618af5cfd4503399d830c5762e",
+    "raw-light/r0/raw/idle/emission.bin": "3a7de222a0b324b407add9de5de1a9c9c8963d60370b821a11aebc43affce1eb",
+    "raw-light/r0/raw/idle/fog.bin": "7460d6323a978856a3ebf4106b2124c00a195a97f284e657e29897138e055ecd",
+    "raw-light/r0/raw/idle/hdr_after.bin": "9e47a8bd339c759db5fe57cafaba90f0c6b8bf35a4baa3c902ab66f18e42d6f3",
+    "raw-light/r0/raw/idle/hdr_before.bin": "9e47a8bd339c759db5fe57cafaba90f0c6b8bf35a4baa3c902ab66f18e42d6f3",
+    "raw-light/r0/raw/idle/indirect.bin": "3b2b248190e1f41427a5d9fa47f9821e08f221794de0dc6917e24b5918fc3c83",
+    "raw-light/r0/raw/idle/linear_depth.bin": "e64a7c89fe1c808bb2a70cf7003eeb8e4c63e1a865045023c037837a7d30323b",
+    "raw-light/r0/raw/idle/manifest.json": "86b6a5e73d6106ccf36cd614238b76ae3961727ac9d2da7348a704020d994c89",
+    "raw-light/r0/raw/idle/motion.bin": "164bb1dd728d17780c5d78b357cd2d53339a1b20133a2d4b3418373dac131bbc",
+    "raw-light/r0/raw/idle/normal_roughness.bin": "61d1e5349de767440208db802e0bb7305ab31d2b7e9beaf770ddedc038d2bef1",
+    "raw-light/r0/raw/idle/primary_geometry.bin": "91b3ce30fe41491eabfede24f6d9e1b8b323a4eb174939a8512608746bb67745",
+    "raw-light/r0/raw/idle/primary_position.bin": "be52bf0876bce82f904303bd06f39a2a033c133a2455fb1eba84dbcf271e8daf",
+    "raw-light/r0/raw/idle/primary_state.bin": "ad09d68a1221af476c477c01901d01c48ab49bdf9fe2ef9e1070bd0cd44d83ca",
+    "raw-light/r0/raw/idle/reconstruction.bin": "70ba7ad5047cd9d72163621f425aaf046a6cb7c72940c1a77f49a26552ffd2c7",
+    "raw-light/r0/raw/idle/request.json": "65bffc395d347af44fb52466261ce990fb1e276c46ca7ac35e26fd9c62bbca41",
+    "raw-light/r0/raw/idle/sentinel_109.bin": "f0463242831187e4bad8c25cc3f0a730db669ea958d54ec2f427fc12c4f4dc15",
+    "raw-light/r0/raw/idle/sentinel_37.bin": "d4aace68e43252349cccadcda7437ed2c567f51bc6dea609b51e34e7495ebddd",
+    "raw-light/r0/raw/idle/sentinel_97.bin": "af99c84198459d5adefcce1a637e98e05ec967e1c16ac631ab526ee2dd7bfd14",
+    "raw-light/r0/raw/idle/specular.bin": "dc472dbc5004117662995f44e90bc6737b94e36233060f6464c3b9d92277d948",
+    "raw-light/r0/raw/idle/specular_albedo.bin": "74d845d2157d10798d8ddfc58a3fc405a6c7ae5ab5bd8bd60a6cad296f20cee0",
+    "raw-light/r0/raw/idle/specular_depth.bin": "45e98fb3294044766b68877ed50e3b096ababa0313ba4116c42a497583f18080",
+    "raw-light/r0/raw/return-settled/diffuse_albedo.bin": "68d5f2fa1b04e83b582eb4b0915f0b5ef277a29ef60ddb6994da9658ba9962b1",
+    "raw-light/r0/raw/return-settled/direct.bin": "a53b5810cb565bff74301bccdf4100050d5064a00e13bbba279883817bdd7c31",
+    "raw-light/r0/raw/return-settled/emission.bin": "57c3e8c1d8369c07b19b9b33cc65b22e42db7ecb79a7664bcb4662a233fbb008",
+    "raw-light/r0/raw/return-settled/fog.bin": "61f61d3731d8a43433d87906b43c32632df3a24c64ab0b66d9430655cb401349",
+    "raw-light/r0/raw/return-settled/hdr_after.bin": "60a94287043630ab158a6f214678bda1409f3c9a40f91124c41744bb38061bc7",
+    "raw-light/r0/raw/return-settled/hdr_before.bin": "60a94287043630ab158a6f214678bda1409f3c9a40f91124c41744bb38061bc7",
+    "raw-light/r0/raw/return-settled/indirect.bin": "134e4f5a729b5d95d7e004562fce41fb31596610f67bd0d05b2fe4b0fa0520cf",
+    "raw-light/r0/raw/return-settled/linear_depth.bin": "d111b2f4ff72c2825fd0d97c064f6291d892302179b1d8907d7d0b7f6e6b7bad",
+    "raw-light/r0/raw/return-settled/manifest.json": "b599fa880dc7d7039d996e6e1515bc9aa2b964ea84dd15f0d538a1656ed911a9",
+    "raw-light/r0/raw/return-settled/motion.bin": "7238f5d43e66dbbc1e2979e0c5b543b1901ec1de9b55c6e033635b2f5041566d",
+    "raw-light/r0/raw/return-settled/normal_roughness.bin": "8336866bc186e72fbb467b4806d0aca4e4c77a189f0301977307f0db4269bd99",
+    "raw-light/r0/raw/return-settled/primary_geometry.bin": "4a601fc1b2872e5e2ddf7bf73f01a43485e6c125251f0ffd9f0d0da4c3392192",
+    "raw-light/r0/raw/return-settled/primary_position.bin": "cd5806c647260bc28b8debf6b90c8efc2934ea5e4445c306527126cfdbc2e689",
+    "raw-light/r0/raw/return-settled/primary_state.bin": "86e189b08bf8a21dd05489c05e1b7b48a7d0e36644db5fe897222b3875ec1ff0",
+    "raw-light/r0/raw/return-settled/reconstruction.bin": "c925c0d37a7e35b5fdeace4d8e6124a51d4245c9f5262ebaa4acc4545ad3dffe",
+    "raw-light/r0/raw/return-settled/request.json": "55d49b38a617efa7459a20241489a8cc376b87feca38503ef3885376fc41f6b8",
+    "raw-light/r0/raw/return-settled/sentinel_109.bin": "f0463242831187e4bad8c25cc3f0a730db669ea958d54ec2f427fc12c4f4dc15",
+    "raw-light/r0/raw/return-settled/sentinel_37.bin": "d4aace68e43252349cccadcda7437ed2c567f51bc6dea609b51e34e7495ebddd",
+    "raw-light/r0/raw/return-settled/sentinel_97.bin": "af99c84198459d5adefcce1a637e98e05ec967e1c16ac631ab526ee2dd7bfd14",
+    "raw-light/r0/raw/return-settled/specular.bin": "39cdb48948bf14f64632dbe12c667ca1ee7f6def64f1bab7727c7061c834ff46",
+    "raw-light/r0/raw/return-settled/specular_albedo.bin": "459ce40dd02e3ee5aeaa12cd453cd1189a83556add3c0f5397e766c62a536bae",
+    "raw-light/r0/raw/return-settled/specular_depth.bin": "cb757bbc2d98d5282e613ce06a50975f985568b73fa78d4ae7c8bae7a337de05",
+    "raw-light/r0/raw/turn-early/diffuse_albedo.bin": "e539e04411131fe6f52797a197552e75cc6f14e7f4ca274667215c0f7c23d93d",
+    "raw-light/r0/raw/turn-early/direct.bin": "14583e5a309ffed18fe836c11f310af89ec3e9cf43a9140d9477a07da68362a7",
+    "raw-light/r0/raw/turn-early/emission.bin": "876d1a1d61d45601ff23a817d5a0067acea28eae9e88b1cb30ab3b1547508dd5",
+    "raw-light/r0/raw/turn-early/fog.bin": "07d632dafd5a52478fee60855391a25d4226f52cfaca5d77074d9b0c210eaf49",
+    "raw-light/r0/raw/turn-early/hdr_after.bin": "2b3ad90e17e5d33db1d9bc6a14bf59ee3410d76ec87244bbee3e11a9ae8e100f",
+    "raw-light/r0/raw/turn-early/hdr_before.bin": "2b3ad90e17e5d33db1d9bc6a14bf59ee3410d76ec87244bbee3e11a9ae8e100f",
+    "raw-light/r0/raw/turn-early/indirect.bin": "7ee159ebaa7ecbaef6e6a6cb766f3f9034867429a5525220df0beb88308eceac",
+    "raw-light/r0/raw/turn-early/linear_depth.bin": "5e72527a3291fbf420a6b10da1adec2f26f594c309c3239049f1265c1be31e16",
+    "raw-light/r0/raw/turn-early/manifest.json": "b3b948d55b2dec4f68b45635d0fb969786e5d465aed1d7ec13b415cfc6a26c6a",
+    "raw-light/r0/raw/turn-early/motion.bin": "d2537756d87ffaaba3bd7a3f9dccc7c734fd1b2532bcd52576f415c1a9144f77",
+    "raw-light/r0/raw/turn-early/normal_roughness.bin": "4e0c25281517911e9b59124c366a57d07267b8667e4fc2375d023109fa7a41d9",
+    "raw-light/r0/raw/turn-early/primary_geometry.bin": "c1051417817a154f1c34e1d93823ccda031e34b5c4f7e3eb136119c6c9e8f220",
+    "raw-light/r0/raw/turn-early/primary_position.bin": "e9f601a49de23df66606c1ccb65199c968580d5fafaefdafe56199bab17bc05f",
+    "raw-light/r0/raw/turn-early/primary_state.bin": "308198d4bbc10a412892f12bc4fd386771a50049b9c0c200fbd819fa95cd507b",
+    "raw-light/r0/raw/turn-early/reconstruction.bin": "f2cfc4bd27022d7b59382b6215137e1786a89e5108302f5179fea81b284f03c9",
+    "raw-light/r0/raw/turn-early/request.json": "6b03ccaeaca859be0138f945933ef941af1e5d1efd2754fef05c526047a0270f",
+    "raw-light/r0/raw/turn-early/sentinel_109.bin": "f0463242831187e4bad8c25cc3f0a730db669ea958d54ec2f427fc12c4f4dc15",
+    "raw-light/r0/raw/turn-early/sentinel_37.bin": "d4aace68e43252349cccadcda7437ed2c567f51bc6dea609b51e34e7495ebddd",
+    "raw-light/r0/raw/turn-early/sentinel_97.bin": "af99c84198459d5adefcce1a637e98e05ec967e1c16ac631ab526ee2dd7bfd14",
+    "raw-light/r0/raw/turn-early/specular.bin": "c85ff215669e99c4d161e8fe8c2d5a070187b0409d3eb82738fcdaeddaf67fb7",
+    "raw-light/r0/raw/turn-early/specular_albedo.bin": "bd91fb87c75af8562b87fbe710c01a5e381f6c1d79d0eae0d627e9346d5bf283",
+    "raw-light/r0/raw/turn-early/specular_depth.bin": "19852ab4468b8e9edcec72c8de6e39fdcc74e6250658f0de43d90a1eedc72c61",
+    "raw-light/r0/raw/turn-settled/diffuse_albedo.bin": "3476cc755ffb537511ad8b79875cd6e30b293be2d65427cdddb0ed8411b1d200",
+    "raw-light/r0/raw/turn-settled/direct.bin": "7a1ee0832411758b5ebf1fbcc75e5add469e605abb83811a57ebf221677df344",
+    "raw-light/r0/raw/turn-settled/emission.bin": "3e50a98c2571053b9cb1ba88593af4cca27154421993a8ec4b33685f3550cbea",
+    "raw-light/r0/raw/turn-settled/fog.bin": "686efeba87c5a10c5999da51a92b44d9c556a90007086667f689d2e56a3e9551",
+    "raw-light/r0/raw/turn-settled/hdr_after.bin": "c8536b1cc2a951c72cb1b60e3591cdf2668d0634d4597ee50362fd52fc77e3b2",
+    "raw-light/r0/raw/turn-settled/hdr_before.bin": "c8536b1cc2a951c72cb1b60e3591cdf2668d0634d4597ee50362fd52fc77e3b2",
+    "raw-light/r0/raw/turn-settled/indirect.bin": "23c3a531bdf56718b599625c465184d49bdc52bdfee7b04f4337c154fc6ffba5",
+    "raw-light/r0/raw/turn-settled/linear_depth.bin": "11dc4521ebd047a8e00d7b6c1bfed0b9f9be6e78b2440652f21dfd08711813e2",
+    "raw-light/r0/raw/turn-settled/manifest.json": "13efe7f0cf96120005f54a8e2e94a0f6f68264fe4b83d734b5906ca31b208611",
+    "raw-light/r0/raw/turn-settled/motion.bin": "343cbe2ea03a89e899c93380f0462830184ee39899dd4b0620876c8bd8840e5a",
+    "raw-light/r0/raw/turn-settled/normal_roughness.bin": "6a120c8566379b1243022215354acfcadf05e87fcba9a6bf0feeed6f922b7343",
+    "raw-light/r0/raw/turn-settled/primary_geometry.bin": "fec71e13a09736fd0817fd47bd0da28859bbb5cda4c5f0ca520bd79dc52c2eb6",
+    "raw-light/r0/raw/turn-settled/primary_position.bin": "404c033ba8aff20005ec2f0987f374248e3529ab6d5986afeed53b085e100ab9",
+    "raw-light/r0/raw/turn-settled/primary_state.bin": "ad25511b1d8f6385f1a9f5e390beb824be52c44dbdf5ada74157c859c679dc5e",
+    "raw-light/r0/raw/turn-settled/reconstruction.bin": "7cea613548a8d040f6878e44343fea366cf77188479e5e1f88eff4ec4cf675bb",
+    "raw-light/r0/raw/turn-settled/request.json": "ddb43a73717ec3929249f9729b5254d6fc78d4d61e2a82700d5e797f9ede6b35",
+    "raw-light/r0/raw/turn-settled/sentinel_109.bin": "f0463242831187e4bad8c25cc3f0a730db669ea958d54ec2f427fc12c4f4dc15",
+    "raw-light/r0/raw/turn-settled/sentinel_37.bin": "d4aace68e43252349cccadcda7437ed2c567f51bc6dea609b51e34e7495ebddd",
+    "raw-light/r0/raw/turn-settled/sentinel_97.bin": "af99c84198459d5adefcce1a637e98e05ec967e1c16ac631ab526ee2dd7bfd14",
+    "raw-light/r0/raw/turn-settled/specular.bin": "daac16440d560158a8d18320da959039de31f457a440fcfc883c893e1ebcb534",
+    "raw-light/r0/raw/turn-settled/specular_albedo.bin": "6933953366827ecafad58eda4cbed7493c659c249df84df05b3a081badae29de",
+    "raw-light/r0/raw/turn-settled/specular_depth.bin": "18be0ddc905c25b98bea3ad9a80225d3e6504c3f4db0f082844ddf1ebf1f368c",
+    "raw-light/r1/raw/idle/diffuse_albedo.bin": "2575d40c23d423e726ab5d531e4f72b71efd52d8de96a21e63a7c8ad222cf107",
+    "raw-light/r1/raw/idle/direct.bin": "2f8a1233b48938ea4431a4bb8a3285ac2d5483a3bc981aa3b8cba3e255fa4b60",
+    "raw-light/r1/raw/idle/emission.bin": "8113f2f69ebbafeb3904649b3f65e88884781b3332fb36857d8164da87b4806c",
+    "raw-light/r1/raw/idle/fog.bin": "6cfea8f2f20d57d0691791a229617ae3a02ef3efffc3bac8fb1cefeb6b50769b",
+    "raw-light/r1/raw/idle/hdr_after.bin": "ae76c4a126efdcdc49421b69ef126f116efb8c170a38a6a2e1ca52ae08352b21",
+    "raw-light/r1/raw/idle/hdr_before.bin": "644815d2fc0122df8ea820bfd8c2d3fe4958e072ba42f62ea17f12ed9a5907db",
+    "raw-light/r1/raw/idle/indirect.bin": "3ff2e90a5681eb7a739fee7f5e72ce637100f081ad0c72647feab40ea219e34f",
+    "raw-light/r1/raw/idle/linear_depth.bin": "0b56b875cff74e3fdd381f4e2c222b0cb137ee14264ad6cb4cec9417ae7217dc",
+    "raw-light/r1/raw/idle/manifest.json": "7a6d216efb5d8f6d7a896905240afa9c6bb9c739139efbd5a904eef080e3a049",
+    "raw-light/r1/raw/idle/motion.bin": "5f3053714ff50455e3231b916f05805b8564336f43a46587bab4896b5dad7afe",
+    "raw-light/r1/raw/idle/normal_roughness.bin": "2c0d45f1d1d671e2611acc2e3098fa929e29e47dd75c35e5adda5befda9dc948",
+    "raw-light/r1/raw/idle/primary_geometry.bin": "7b198467c1d16a5446ff4f9f7d8afd0dffefd866fbff58da7f730493009725fb",
+    "raw-light/r1/raw/idle/primary_position.bin": "4e65d4710d8de7879a45a02162101fa8cab645cef949ea127b986e323420e0bc",
+    "raw-light/r1/raw/idle/primary_state.bin": "59605da7f1c7a679af57a3696669c9418c86adc56b688a4b1cb5fde76c51fa5b",
+    "raw-light/r1/raw/idle/reconstruction.bin": "45d7ee54efbca54f37c0175b305f9cb6629a6c6ed071cedde0214af52d8463a6",
+    "raw-light/r1/raw/idle/request.json": "65bffc395d347af44fb52466261ce990fb1e276c46ca7ac35e26fd9c62bbca41",
+    "raw-light/r1/raw/idle/sentinel_109.bin": "f0463242831187e4bad8c25cc3f0a730db669ea958d54ec2f427fc12c4f4dc15",
+    "raw-light/r1/raw/idle/sentinel_37.bin": "d4aace68e43252349cccadcda7437ed2c567f51bc6dea609b51e34e7495ebddd",
+    "raw-light/r1/raw/idle/sentinel_97.bin": "af99c84198459d5adefcce1a637e98e05ec967e1c16ac631ab526ee2dd7bfd14",
+    "raw-light/r1/raw/idle/specular.bin": "2712f2df630c9e26bdc3545f8ffdcc114ba8247678f828fad979d6ea8c4bcc82",
+    "raw-light/r1/raw/idle/specular_albedo.bin": "b01fb295cf7f66c956a6413fb3c658293311002daa68901da0e7a0fe7ae27cff",
+    "raw-light/r1/raw/idle/specular_depth.bin": "0fa923c42744c48710723b3a0c8dc2273b6dc01628e314b87eb3bd743ad52c0c",
+    "raw-light/r1/raw/return-settled/diffuse_albedo.bin": "a7f454b45573250d6882af19e1aa4b525171e4d9dff175a088b58d9b932a3222",
+    "raw-light/r1/raw/return-settled/direct.bin": "20715e2322ecff2d1418c163cba6cd6b0429b8c4c2a3189adb70e33fa40b3155",
+    "raw-light/r1/raw/return-settled/emission.bin": "126a3635a77f67a01378aaf078f22204a18e015c0d2f8e005cfd74a71f7683a2",
+    "raw-light/r1/raw/return-settled/fog.bin": "4c3820fcfa6e86fd4eebb367aa7763133f71f1922410f79d17a54d8caca3b551",
+    "raw-light/r1/raw/return-settled/hdr_after.bin": "8752f34cce4d1573118c25f416fd622950a4fc9c7a698cef03abcd2059493de6",
+    "raw-light/r1/raw/return-settled/hdr_before.bin": "a9d7871718958955fc43e308823e0cb9247367cec629d31e2e25fa4543dd3d70",
+    "raw-light/r1/raw/return-settled/indirect.bin": "b2ec3e41861de635d8b0c35a015af247bc1f23debb1f7411ee4d7771077e2029",
+    "raw-light/r1/raw/return-settled/linear_depth.bin": "1d1b77e8d39f5669b6ea3b44b7262d0171ec90150b89ee781a692a3db8ba010a",
+    "raw-light/r1/raw/return-settled/manifest.json": "3b427d1d69c681686e4fe5253d7fac029720d3e354b9b0bcae102745e6700147",
+    "raw-light/r1/raw/return-settled/motion.bin": "d0446272832595a7b3419eb1c3dbe2a52607643a291daf952e4628baa3b2efb6",
+    "raw-light/r1/raw/return-settled/normal_roughness.bin": "58eab8966e8cf78544cedaf951540737022ebe2a69340408a594a854d8966da2",
+    "raw-light/r1/raw/return-settled/primary_geometry.bin": "248c503e071a8115e9ad2ed7abbbb81d611c12c936a4a47acf3c8443e4a1dc5e",
+    "raw-light/r1/raw/return-settled/primary_position.bin": "54880480e1b9fb805de4b06ee479272eb6327da7df418efcb44d8df9b1d2e951",
+    "raw-light/r1/raw/return-settled/primary_state.bin": "8e7e052045f94c9f4e9487ddb9ed24239425ced9a78416372a7bc089561d7eb3",
+    "raw-light/r1/raw/return-settled/reconstruction.bin": "854c0490edd661676c08a6a4a32395cf9131fa03426ab8813941bf3e9394b9f6",
+    "raw-light/r1/raw/return-settled/request.json": "55d49b38a617efa7459a20241489a8cc376b87feca38503ef3885376fc41f6b8",
+    "raw-light/r1/raw/return-settled/sentinel_109.bin": "f0463242831187e4bad8c25cc3f0a730db669ea958d54ec2f427fc12c4f4dc15",
+    "raw-light/r1/raw/return-settled/sentinel_37.bin": "d4aace68e43252349cccadcda7437ed2c567f51bc6dea609b51e34e7495ebddd",
+    "raw-light/r1/raw/return-settled/sentinel_97.bin": "af99c84198459d5adefcce1a637e98e05ec967e1c16ac631ab526ee2dd7bfd14",
+    "raw-light/r1/raw/return-settled/specular.bin": "7282dd78318199c1e140783b4f561bcd0302fe1d9edcaff7af7d9cb90305c164",
+    "raw-light/r1/raw/return-settled/specular_albedo.bin": "c7de0857731ef76e71ca660e45d037516ebe25271ce85652f244f436b195254f",
+    "raw-light/r1/raw/return-settled/specular_depth.bin": "6e45fd0e44e4a610cab528bf7c5fee0f55ce09728bf4732065b5a18b089156a7",
+    "raw-light/r1/raw/turn-early/diffuse_albedo.bin": "a6fe11d279a8c3ad96cf435038ee88a48f94371479ec5ae4c88df7a69c15fe36",
+    "raw-light/r1/raw/turn-early/direct.bin": "dbd1aca4a45d5459ea9ede941150ec17185db2fe82cb69d159e5afec7ee81d52",
+    "raw-light/r1/raw/turn-early/emission.bin": "05609444f4c323774644dfc2dcf62a0bb371b0c45a8da7d0ef51eac7cadfbf13",
+    "raw-light/r1/raw/turn-early/fog.bin": "eb5bf63268898e3b9e5f9339aee37317b412ff1adbed69749a4a7e2978d15ce7",
+    "raw-light/r1/raw/turn-early/hdr_after.bin": "91f0beccaaf727f1ed3d9c52323bb995249e6b0b64c6eac0be79c4362f913625",
+    "raw-light/r1/raw/turn-early/hdr_before.bin": "165dc1cc4d44f0f94cfeaffae1af70387b97357f5962581bec38bec2ef79c266",
+    "raw-light/r1/raw/turn-early/indirect.bin": "f8131e0539a889ae623874ce16951d64c2c3a59f6bdd37abe099fab5aa7f16ca",
+    "raw-light/r1/raw/turn-early/linear_depth.bin": "0c8c75ed714aa06f492e2f6956bce88c39daee6bc4918f420b6be35f4ebba996",
+    "raw-light/r1/raw/turn-early/manifest.json": "0b3375b6af9785a205466ebc9b281b4d0cd1a391b8b1299be435063e228bdd14",
+    "raw-light/r1/raw/turn-early/motion.bin": "2bedffdbac3df64a7932ddfd0091d1ba7e3fa596e33c94b69373d192436e52ad",
+    "raw-light/r1/raw/turn-early/normal_roughness.bin": "902c539dc873f1676fd5c8181a6cc198fe91a5e1c31db33cba340a763b22129a",
+    "raw-light/r1/raw/turn-early/primary_geometry.bin": "3bbe6d922c6fe728622d965d1ae6797606520a9b0573d8130fcecd474ca60445",
+    "raw-light/r1/raw/turn-early/primary_position.bin": "4d72e305c84998e5c568b03d1ab6bbdcdac0fefcc46ebd4870db202c10c22666",
+    "raw-light/r1/raw/turn-early/primary_state.bin": "85dd18e9aada87b89d62f4edf2cc548217329de1139809f22f308a9b6906c523",
+    "raw-light/r1/raw/turn-early/reconstruction.bin": "d332f77e7bde7766dce66d314082fc062415be2521a115bd4c7cc42db69ab1fd",
+    "raw-light/r1/raw/turn-early/request.json": "6b03ccaeaca859be0138f945933ef941af1e5d1efd2754fef05c526047a0270f",
+    "raw-light/r1/raw/turn-early/sentinel_109.bin": "f0463242831187e4bad8c25cc3f0a730db669ea958d54ec2f427fc12c4f4dc15",
+    "raw-light/r1/raw/turn-early/sentinel_37.bin": "d4aace68e43252349cccadcda7437ed2c567f51bc6dea609b51e34e7495ebddd",
+    "raw-light/r1/raw/turn-early/sentinel_97.bin": "af99c84198459d5adefcce1a637e98e05ec967e1c16ac631ab526ee2dd7bfd14",
+    "raw-light/r1/raw/turn-early/specular.bin": "61e9c16131d1da6177ef1b8a2cf899d6b7ced02296850b904fbb9cd99798b61b",
+    "raw-light/r1/raw/turn-early/specular_albedo.bin": "1a6c957de034ae988df620c09bf81f3a1a589596c3508c3cc3f4b59ac91ef67d",
+    "raw-light/r1/raw/turn-early/specular_depth.bin": "fefa242f26ea32e807eb4e105e2a889ec3f55df5d9fc2f8cc01f252670c3626e",
+    "raw-light/r1/raw/turn-settled/diffuse_albedo.bin": "0e4ec678979a7e498febc12cac23488b2de5ddbb7079513576a75b7b4d46bd3b",
+    "raw-light/r1/raw/turn-settled/direct.bin": "267d25de24fd2702b0cc887f809ed088e38276abe3f5ee3a7bd53ed71ccfcaf5",
+    "raw-light/r1/raw/turn-settled/emission.bin": "565e686905c1c014fbfbb2499607608427620c9949ccef12275760658cdc7e0b",
+    "raw-light/r1/raw/turn-settled/fog.bin": "d4f9d915d371369175f96b8d8e5984770be6ab97db4e7cdd67cabe47c9f2d3f8",
+    "raw-light/r1/raw/turn-settled/hdr_after.bin": "dc86e7c4e90a807cca66d5d2a98dbcddf2d1604949dcc5c2cd1a846deb7c70b5",
+    "raw-light/r1/raw/turn-settled/hdr_before.bin": "1bec580c8dc7cea88231e4293f0b16069a0e4aaf3b8ac8f6a64687594431f2e4",
+    "raw-light/r1/raw/turn-settled/indirect.bin": "bebbf21d9a586018084bbb7057625e94e3edd23b68e88265693bafc3e1e0898c",
+    "raw-light/r1/raw/turn-settled/linear_depth.bin": "9068c44885cd795a70c5ea1e75c94e0558ac6fe527ace43a8b5689a0702b8242",
+    "raw-light/r1/raw/turn-settled/manifest.json": "79905129dd0cec667174ff042c58627d2485a8feeaa7406eac77d2515edcbb49",
+    "raw-light/r1/raw/turn-settled/motion.bin": "72d251ccdf8fc52745c0796040f82961ee179e0ebe34c85d17c4d2439bdb09eb",
+    "raw-light/r1/raw/turn-settled/normal_roughness.bin": "ec0802c89a224b9b20abf35dab24829528b4318e8f76ac413a895dbd7b3e4cac",
+    "raw-light/r1/raw/turn-settled/primary_geometry.bin": "5f277d1d8e16c6f99646d6683c3c488e752ea7e2a5ebd33a98262b3d735334bf",
+    "raw-light/r1/raw/turn-settled/primary_position.bin": "a777a372ac5915375438205d68f90f15823a1a7e925e29ce54d8f230c1db2f53",
+    "raw-light/r1/raw/turn-settled/primary_state.bin": "81c1d4055eb5c9f4f8524ab65ecbc4a6434d8abaf7df7b5c1aeb670659562151",
+    "raw-light/r1/raw/turn-settled/reconstruction.bin": "5ad4840f585ab8ecc5b9ea105eea4b50db5691c201ee59fcef300b42c72077bf",
+    "raw-light/r1/raw/turn-settled/request.json": "ddb43a73717ec3929249f9729b5254d6fc78d4d61e2a82700d5e797f9ede6b35",
+    "raw-light/r1/raw/turn-settled/sentinel_109.bin": "f0463242831187e4bad8c25cc3f0a730db669ea958d54ec2f427fc12c4f4dc15",
+    "raw-light/r1/raw/turn-settled/sentinel_37.bin": "d4aace68e43252349cccadcda7437ed2c567f51bc6dea609b51e34e7495ebddd",
+    "raw-light/r1/raw/turn-settled/sentinel_97.bin": "af99c84198459d5adefcce1a637e98e05ec967e1c16ac631ab526ee2dd7bfd14",
+    "raw-light/r1/raw/turn-settled/specular.bin": "bbb33f0a44325ba34fe9138d45bd53cd82981e59d0bee487eda49e917031193f",
+    "raw-light/r1/raw/turn-settled/specular_albedo.bin": "683bbde879f351cfafea639ab94b2f83da37bb3d6125917e8f66036c87871906",
+    "raw-light/r1/raw/turn-settled/specular_depth.bin": "3d9fe2936d2e481340478493d9361c6810cfe4f5bbe73c962d6b0588dd1e5341",
+    "raw-light-sources/capture/raw/idle/diffuse_albedo.bin": "90320f9a9b05066637d5a1d9c0b431cf2d6fdffe39ec9cfd469c7bf602f9860c",
+    "raw-light-sources/capture/raw/idle/direct.bin": "6afa1d7218aa6fb1da8e50f5a52b719fe86697e4c60c14f3703113a6a24c4ef4",
+    "raw-light-sources/capture/raw/idle/emission.bin": "256cd7206fc1f76d7f7ef7747e6e05e6f20ca1cb6e4a8ba33527b5610227da5a",
+    "raw-light-sources/capture/raw/idle/fog.bin": "cec8becc082af1ff4d53c0907506b32c2220c5f3c6f09a31c38247b39e67bfcc",
+    "raw-light-sources/capture/raw/idle/hdr_after.bin": "b96daab07097f30aebe553fb588667441022ef7e8c8c26b4865a01ac05cc2683",
+    "raw-light-sources/capture/raw/idle/hdr_before.bin": "b96daab07097f30aebe553fb588667441022ef7e8c8c26b4865a01ac05cc2683",
+    "raw-light-sources/capture/raw/idle/indirect.bin": "142c069c6b67b6aff42df42644db5e7906b3263bbaa4488e6ac2f31c86f9bf75",
+    "raw-light-sources/capture/raw/idle/indirect_surface.bin": "d3cd1413851d1969c3f87f95c0e069c297b99b37c23b273ac7e599750f121882",
+    "raw-light-sources/capture/raw/idle/linear_depth.bin": "4528a105d6b7c6737a2ee0d4e7ce43237f4b3a8b13a6a445c7fdaadf1a91d95e",
+    "raw-light-sources/capture/raw/idle/manifest.json": "3e7db775a5434651d7fb99762f9521204ae9d3113d7a8903672a3cd9cedbbea5",
+    "raw-light-sources/capture/raw/idle/motion.bin": "e4638e50ec6008e94f0618a30be42ce2a6c4756dc6db5b68efdb932fc03e886b",
+    "raw-light-sources/capture/raw/idle/normal_roughness.bin": "2377793c41706851882ef48dafe67c9ada2396707dd13bc0af0b3b2d363ef235",
+    "raw-light-sources/capture/raw/idle/primary_geometry.bin": "d36fd741bca2a4fe2acd1f861789820c12616a68ccb1cd97c15a0fb86d00e410",
+    "raw-light-sources/capture/raw/idle/primary_position.bin": "321a48b133a2f78ba9bd3cf68d27f7949fcdbf43491992cd4c63ff14614115bc",
+    "raw-light-sources/capture/raw/idle/primary_state.bin": "7799b6217fa852890c2723adb4088bf55f1e490a822d2cc99f224b9bf5017192",
+    "raw-light-sources/capture/raw/idle/reconstruction.bin": "7e761ee22ae5105f022557bf317d9ebe8b57c83a3344480328a5a2c0854febc1",
+    "raw-light-sources/capture/raw/idle/request.json": "65bffc395d347af44fb52466261ce990fb1e276c46ca7ac35e26fd9c62bbca41",
+    "raw-light-sources/capture/raw/idle/sentinel_109.bin": "f0463242831187e4bad8c25cc3f0a730db669ea958d54ec2f427fc12c4f4dc15",
+    "raw-light-sources/capture/raw/idle/sentinel_37.bin": "d4aace68e43252349cccadcda7437ed2c567f51bc6dea609b51e34e7495ebddd",
+    "raw-light-sources/capture/raw/idle/sentinel_97.bin": "af99c84198459d5adefcce1a637e98e05ec967e1c16ac631ab526ee2dd7bfd14",
+    "raw-light-sources/capture/raw/idle/specular.bin": "9e6e09a98fc264f4c8e8c0c8de1a5cbb3a19c38ad575992426d2a2cbc2416d5f",
+    "raw-light-sources/capture/raw/idle/specular_albedo.bin": "438109d167cd8c5c3e0542ddd535726f484d6dc3c5ce7461d07822dcc9daa8ca",
+    "raw-light-sources/capture/raw/idle/specular_depth.bin": "cc08ccc6c019932e80a91c0a37917dc4db060caeb9ed61673b5523d0e9eb2f00",
+    "raw-light-sources/capture/raw/return-settled/diffuse_albedo.bin": "4082dff571442bc70c69d6fd2825ac60dc29b22eaf72b3877f05e8946d255c0a",
+    "raw-light-sources/capture/raw/return-settled/direct.bin": "d93e00528daccae6dbc690e44169df3dbc89066718ceb51acef45b7f0fa2d102",
+    "raw-light-sources/capture/raw/return-settled/emission.bin": "ed2b9238306c765b97b20ebc3977571cf481fe76945f3663e9a2d5f7b382aca3",
+    "raw-light-sources/capture/raw/return-settled/fog.bin": "f888de8612711a76e17a1d6c6211baa4a9cbb47357996c52900301eeb261b943",
+    "raw-light-sources/capture/raw/return-settled/hdr_after.bin": "a0732a25d6b4a653c01a2aa86c9fabf21d9b38fbe99a4bbe7483954aa01da722",
+    "raw-light-sources/capture/raw/return-settled/hdr_before.bin": "a0732a25d6b4a653c01a2aa86c9fabf21d9b38fbe99a4bbe7483954aa01da722",
+    "raw-light-sources/capture/raw/return-settled/indirect.bin": "2c9a3191b7917549d7eec4b630f3943a4d43e76c724cc1df7258f7de5fcada8d",
+    "raw-light-sources/capture/raw/return-settled/indirect_surface.bin": "4988963f89efd74af61f398304ab75368a56c5096b7be7764dc43051b35107b2",
+    "raw-light-sources/capture/raw/return-settled/linear_depth.bin": "a3e753878f97b3b8eee4217cd90a95e0ead804f711f0031a1612eb3078f9fe0c",
+    "raw-light-sources/capture/raw/return-settled/manifest.json": "6e03d447c6762bf7afdebf11bbd05599a2e1b1056c368e206124c20dac7fb66b",
+    "raw-light-sources/capture/raw/return-settled/motion.bin": "b02f9ad7e7bd1e24ffc1003216258f1e8bef48ae8508932a2577c43466647e46",
+    "raw-light-sources/capture/raw/return-settled/normal_roughness.bin": "afa13874b75c28e82ade06e95bd9fdc42dffd849b444284a91fdce4bfe0b61df",
+    "raw-light-sources/capture/raw/return-settled/primary_geometry.bin": "2f3f2492ea62d874c134984ba114fe3512fbc65ee562d9fe1b22b01257f0a0f9",
+    "raw-light-sources/capture/raw/return-settled/primary_position.bin": "f7a4a10c7085e205790c5cf5fe64e2be75fe718e3f946122dfd70b1ca2b521c4",
+    "raw-light-sources/capture/raw/return-settled/primary_state.bin": "6a20bfa254e6f2bd6d59f295275610aa16501fe8a6a5b2e2ce852fb3790b3640",
+    "raw-light-sources/capture/raw/return-settled/reconstruction.bin": "6d1361374f39a8dc27e4262e5dc72dde3133ea0b8a665e61fc6033e6115e7322",
+    "raw-light-sources/capture/raw/return-settled/request.json": "55d49b38a617efa7459a20241489a8cc376b87feca38503ef3885376fc41f6b8",
+    "raw-light-sources/capture/raw/return-settled/sentinel_109.bin": "f0463242831187e4bad8c25cc3f0a730db669ea958d54ec2f427fc12c4f4dc15",
+    "raw-light-sources/capture/raw/return-settled/sentinel_37.bin": "d4aace68e43252349cccadcda7437ed2c567f51bc6dea609b51e34e7495ebddd",
+    "raw-light-sources/capture/raw/return-settled/sentinel_97.bin": "af99c84198459d5adefcce1a637e98e05ec967e1c16ac631ab526ee2dd7bfd14",
+    "raw-light-sources/capture/raw/return-settled/specular.bin": "fd3ed0bcf898200229c0d4f0e5078e346bbc4cc75afc0112fe28698e93ceebd1",
+    "raw-light-sources/capture/raw/return-settled/specular_albedo.bin": "2e8eb79b93b241f1e70542c704bf69e1b339882c72594770df744072c77919b2",
+    "raw-light-sources/capture/raw/return-settled/specular_depth.bin": "34b698180d99ae8c8c65e84ed4c09e90ef224450b5b3f899c06dbd623a5f39a3",
+    "raw-light-sources/capture/raw/turn-early/diffuse_albedo.bin": "b10b0be91445d3d391171201a7fedbe0cb8e8d19c767856b3296630abe7adfa1",
+    "raw-light-sources/capture/raw/turn-early/direct.bin": "5eac15a2de3759dfa8fd9af85ab4a67d9c568a7f31bcdedeb0e7b00875b1c408",
+    "raw-light-sources/capture/raw/turn-early/emission.bin": "9eecd8a396842ddc3ccccb76d1b3bd74d128cce6a5cf5b769f0c4ae432779e1b",
+    "raw-light-sources/capture/raw/turn-early/fog.bin": "290d0ae8c66a9f5e9059e264855a339a99c29edaaeaca70b9b47589b30f51631",
+    "raw-light-sources/capture/raw/turn-early/hdr_after.bin": "ecc56c9ea5d9cb6953790224fefe49cefeb942b111625de5c593b0f588c0dd15",
+    "raw-light-sources/capture/raw/turn-early/hdr_before.bin": "ecc56c9ea5d9cb6953790224fefe49cefeb942b111625de5c593b0f588c0dd15",
+    "raw-light-sources/capture/raw/turn-early/indirect.bin": "9c268bed202b21910a58820e3e455f7b56022f4c53532707d5d427e127234b2d",
+    "raw-light-sources/capture/raw/turn-early/indirect_surface.bin": "a3064721d808426608618651097aaad97f1885af9600f3262a569160b047fabe",
+    "raw-light-sources/capture/raw/turn-early/linear_depth.bin": "e665d0b5036bf22b189acd93f46c84052be61935e8454c03bc7d34cad3cf02bd",
+    "raw-light-sources/capture/raw/turn-early/manifest.json": "9f1cb5a4e1f1201a66875b83187adf7240036c72a0bd90c197ade681e471f0e8",
+    "raw-light-sources/capture/raw/turn-early/motion.bin": "80b1a6a64ecc88eb65b1ad9378460ac5d79b449bf9214af04275a31665ab1578",
+    "raw-light-sources/capture/raw/turn-early/normal_roughness.bin": "95605cf99897a5d85cea7015f9c0a834b4a1a0589835205698a7e89ce110f45a",
+    "raw-light-sources/capture/raw/turn-early/primary_geometry.bin": "4e35b0b52a6d70c9ae05f49ba032ad08943cb3ddc69b9ecbaabc1b9514b7720c",
+    "raw-light-sources/capture/raw/turn-early/primary_position.bin": "e3fe392b5682f8d41fcceaf13335974f2c2a6dd4238a3759e1e7c9215aada240",
+    "raw-light-sources/capture/raw/turn-early/primary_state.bin": "d18679c57abede7698daf43dcf0cea9dabb444d16092e220120c329bc52cb9de",
+    "raw-light-sources/capture/raw/turn-early/reconstruction.bin": "d050e33cb4c39f7d1916a0aba6af3ee9c0a771cf7bdc334df2e3d7419e73b1ed",
+    "raw-light-sources/capture/raw/turn-early/request.json": "6b03ccaeaca859be0138f945933ef941af1e5d1efd2754fef05c526047a0270f",
+    "raw-light-sources/capture/raw/turn-early/sentinel_109.bin": "f0463242831187e4bad8c25cc3f0a730db669ea958d54ec2f427fc12c4f4dc15",
+    "raw-light-sources/capture/raw/turn-early/sentinel_37.bin": "d4aace68e43252349cccadcda7437ed2c567f51bc6dea609b51e34e7495ebddd",
+    "raw-light-sources/capture/raw/turn-early/sentinel_97.bin": "af99c84198459d5adefcce1a637e98e05ec967e1c16ac631ab526ee2dd7bfd14",
+    "raw-light-sources/capture/raw/turn-early/specular.bin": "65b8f7169cdb19adb42066a291862177e2d2e9ef8a334b108659149757f62145",
+    "raw-light-sources/capture/raw/turn-early/specular_albedo.bin": "7c7fabf589c81737f554a8eefa5b5c2c397990dfe049aa73668028c7f49c1e92",
+    "raw-light-sources/capture/raw/turn-early/specular_depth.bin": "29e06a4016ed47fc834bc086478cba7eab79508e24d736bff2d74c1551feacf8",
+    "raw-light-sources/capture/raw/turn-settled/diffuse_albedo.bin": "40099b3909c77d010b666931e107eeb35e323d7465b7a8ffb1971667ceabacde",
+    "raw-light-sources/capture/raw/turn-settled/direct.bin": "02b47dc140b24dd27ab40f0893db9b161ca38d2d3ba584cad7b84614ffa98425",
+    "raw-light-sources/capture/raw/turn-settled/emission.bin": "e981dcb62a8e193fe1fe3b2a50c710b2161011cd0cbe5d5d18f90485bd1e232b",
+    "raw-light-sources/capture/raw/turn-settled/fog.bin": "9d513fdd0932c7c5225dad940282ec0dd89e41e74bdb9a4b2d316a71098098e0",
+    "raw-light-sources/capture/raw/turn-settled/hdr_after.bin": "a0a2077680e7392bb7edf73ba11eac70d40c07c34b0c7e72e11a51ef17876bb7",
+    "raw-light-sources/capture/raw/turn-settled/hdr_before.bin": "a0a2077680e7392bb7edf73ba11eac70d40c07c34b0c7e72e11a51ef17876bb7",
+    "raw-light-sources/capture/raw/turn-settled/indirect.bin": "fffbb024c254cf78667875a5e872fbef6f6675f1be69a05f9406bfa8e1ce9283",
+    "raw-light-sources/capture/raw/turn-settled/indirect_surface.bin": "dedc4b9194e44f908098ffce657790cdf68a816010bc7e595574af724053cc7a",
+    "raw-light-sources/capture/raw/turn-settled/linear_depth.bin": "e566c608d074cc2fef382c63d131bcf82a7293414eb487a9d713a09139d1a990",
+    "raw-light-sources/capture/raw/turn-settled/manifest.json": "06b5932141e8c360381d5ccefa09c4f11167fe958b3a0866659b76e229069a09",
+    "raw-light-sources/capture/raw/turn-settled/motion.bin": "116f6ea7c60178224be1b7a7277eb33e68ef73db8de904c5bae85f348511f001",
+    "raw-light-sources/capture/raw/turn-settled/normal_roughness.bin": "763bf9411fb5389183ce891e05f3022b6c8ae1651019834944eba428db089cc1",
+    "raw-light-sources/capture/raw/turn-settled/primary_geometry.bin": "90f03e24c00bca0da11bbc138780851ffc17f8e55a2302905d129d9810e577a7",
+    "raw-light-sources/capture/raw/turn-settled/primary_position.bin": "f25000efa727b6429a50a8560cb41d6c7b425991c273687423815f34f48adef0",
+    "raw-light-sources/capture/raw/turn-settled/primary_state.bin": "8ec66b8c740cd575a3f15ba4266ce1b85b03074dfd19c17d8e8792047932111b",
+    "raw-light-sources/capture/raw/turn-settled/reconstruction.bin": "97ac1b6646610c5e08d8a275f04d26c1210d8ae76c026cf99b2b71513a00541c",
+    "raw-light-sources/capture/raw/turn-settled/request.json": "ddb43a73717ec3929249f9729b5254d6fc78d4d61e2a82700d5e797f9ede6b35",
+    "raw-light-sources/capture/raw/turn-settled/sentinel_109.bin": "f0463242831187e4bad8c25cc3f0a730db669ea958d54ec2f427fc12c4f4dc15",
+    "raw-light-sources/capture/raw/turn-settled/sentinel_37.bin": "d4aace68e43252349cccadcda7437ed2c567f51bc6dea609b51e34e7495ebddd",
+    "raw-light-sources/capture/raw/turn-settled/sentinel_97.bin": "af99c84198459d5adefcce1a637e98e05ec967e1c16ac631ab526ee2dd7bfd14",
+    "raw-light-sources/capture/raw/turn-settled/specular.bin": "b2c54dbe0c1df7dd24a47f6fa1bebf04c26b0eeaadc5cad1f019d8d480b36b04",
+    "raw-light-sources/capture/raw/turn-settled/specular_albedo.bin": "90367ffddd50691376c2fa12b1db53548a111f07600cc9c6a2b0e21e414863b8",
+    "raw-light-sources/capture/raw/turn-settled/specular_depth.bin": "8b7653236ba19c1c1bfca8726d8fac0c7b35b8c5c65fe96171bf7c1dd3e6c77c",
+    "raw-light-bounces/capture/raw/idle/diffuse_albedo.bin": "0aa161dd2bfd8e819dd6f7ea0f90c7e0fcd5ca40fbc0f82cfb6f010b343794ba",
+    "raw-light-bounces/capture/raw/idle/direct.bin": "fdccdeae5d92099edea286cb55f191536547640a1949f767ffa03eca26c9453a",
+    "raw-light-bounces/capture/raw/idle/emission.bin": "0691497f9dabeb61a455affb6928b450424b0f718308b2193912adf2040956d3",
+    "raw-light-bounces/capture/raw/idle/fog.bin": "d8cc63e7d860cb51b51c1c00d68aca9530c5eaa1b90a3b817bff8a5b19f0dcaa",
+    "raw-light-bounces/capture/raw/idle/hdr_after.bin": "22daca5d325029a7492af5d952d1b97e3c928835f16859ae9de9941c132a318b",
+    "raw-light-bounces/capture/raw/idle/hdr_before.bin": "22daca5d325029a7492af5d952d1b97e3c928835f16859ae9de9941c132a318b",
+    "raw-light-bounces/capture/raw/idle/indirect.bin": "1d3a851127c4701858ccef877951cbce0a5c835acbf413ece14b268f27517682",
+    "raw-light-bounces/capture/raw/idle/indirect_surface.bin": "eac707b1bde892f4b56cd1b5b635482cf12925e89781fe623ea1fcc20e586086",
+    "raw-light-bounces/capture/raw/idle/linear_depth.bin": "e82996d08d8229af594ab6f7a2b7b559ead3fa71a23bf683061c408363e1535f",
+    "raw-light-bounces/capture/raw/idle/manifest.json": "fa2f8672a4e791528f256e757446bb7c8b784864957cefbf9ed4d20e0e7a4894",
+    "raw-light-bounces/capture/raw/idle/motion.bin": "34241bb9a8df299eb1e380afab2cadcc9135b7939448cbc6cac59232c9fea01d",
+    "raw-light-bounces/capture/raw/idle/normal_roughness.bin": "7e2142d7c63dff0aef8d6c78262f3dab9b74111a7c2fc337ab3b7070c1c4db6d",
+    "raw-light-bounces/capture/raw/idle/primary_geometry.bin": "71c33ef1884fd63b0a744babcf02e35d169cbee73568e43edded444290e9ec27",
+    "raw-light-bounces/capture/raw/idle/primary_position.bin": "d3c0635895a0751a16e1f7307646304511bb220310e831f8d1e92d5fabbb6fef",
+    "raw-light-bounces/capture/raw/idle/primary_state.bin": "99e52610ce40b691c26caf525843cbf7347030a29460dd71a5c498027a9c6513",
+    "raw-light-bounces/capture/raw/idle/reconstruction.bin": "3e007e59c04e370e16fa25cecb3668743a8ff70a22adb6d2fe6758a9fee8bee5",
+    "raw-light-bounces/capture/raw/idle/request.json": "65bffc395d347af44fb52466261ce990fb1e276c46ca7ac35e26fd9c62bbca41",
+    "raw-light-bounces/capture/raw/idle/sentinel_109.bin": "f0463242831187e4bad8c25cc3f0a730db669ea958d54ec2f427fc12c4f4dc15",
+    "raw-light-bounces/capture/raw/idle/sentinel_37.bin": "d4aace68e43252349cccadcda7437ed2c567f51bc6dea609b51e34e7495ebddd",
+    "raw-light-bounces/capture/raw/idle/sentinel_97.bin": "af99c84198459d5adefcce1a637e98e05ec967e1c16ac631ab526ee2dd7bfd14",
+    "raw-light-bounces/capture/raw/idle/specular.bin": "8899dda0422aac394e2430dcfbde65236c5601cf7cecf8d6c7701a637cdb23a5",
+    "raw-light-bounces/capture/raw/idle/specular_albedo.bin": "622196b7953a72ba52e1369023b740f5a0d58a4474e1917581a8114099097d15",
+    "raw-light-bounces/capture/raw/idle/specular_depth.bin": "56c199ca71421d41b0873fe0855844b0d85a90fa2de5887755df10772fa14f9c",
+    "raw-light-bounces/capture/raw/return-settled/diffuse_albedo.bin": "934c919d95dc0fe0d4afb1bc3bf8dc1efab7881e06c57db30f1337754633ade4",
+    "raw-light-bounces/capture/raw/return-settled/direct.bin": "b52b7085132b7ea9fe8c83680db9246ab1e445a0a5517c11f79f1800a1fdc7ca",
+    "raw-light-bounces/capture/raw/return-settled/emission.bin": "fa690a888810587b49a626433fa93bc5920954bb6e14deb468dbc4c0becc2d18",
+    "raw-light-bounces/capture/raw/return-settled/fog.bin": "6fde03b6d0e624b3db9efcfa34c2e86d9a5b6b5b44f0ea5972f36bd1ba08534c",
+    "raw-light-bounces/capture/raw/return-settled/hdr_after.bin": "e63a879a81731ab1f021229a995d1a5d73cce666c7eff4d13143db8d46a7dc05",
+    "raw-light-bounces/capture/raw/return-settled/hdr_before.bin": "e63a879a81731ab1f021229a995d1a5d73cce666c7eff4d13143db8d46a7dc05",
+    "raw-light-bounces/capture/raw/return-settled/indirect.bin": "963045cad2803496b617cd878d637f851c2b6b14e04afbab21575daee4e72cc0",
+    "raw-light-bounces/capture/raw/return-settled/indirect_surface.bin": "e3b2b2a0420f163655b813d4977c85a04c8aab3b9a184c22a5e4236b917a7f01",
+    "raw-light-bounces/capture/raw/return-settled/linear_depth.bin": "da65dbddfe9b1377a06a32d6a15251224e8f61d1a7e6572bda413047e9541061",
+    "raw-light-bounces/capture/raw/return-settled/manifest.json": "a0b88d171723326cbc8f3173d8b5e506d14e63aaf4137f8bf1344331c78336c1",
+    "raw-light-bounces/capture/raw/return-settled/motion.bin": "28469eba7fce69ec447fe39cef69d68b9801e8d6e2246b5194ae2f06b9d18d4e",
+    "raw-light-bounces/capture/raw/return-settled/normal_roughness.bin": "6b1b170f66f645b5d0ce913387130246c1adda32ab0c6f5f978a907125200be4",
+    "raw-light-bounces/capture/raw/return-settled/primary_geometry.bin": "88869bee9d523e41e26f04bbf24a4d37648058b72f1f4f9f41bacf5dad91a004",
+    "raw-light-bounces/capture/raw/return-settled/primary_position.bin": "449112b1f641bd1d4186aafc95d735cdc3ff4c6dc2733132e93b5abfb41de00c",
+    "raw-light-bounces/capture/raw/return-settled/primary_state.bin": "a91e09ad6ffc059c0629b35cf7d0db27dee4318e937b491d329c9ca3c5da790c",
+    "raw-light-bounces/capture/raw/return-settled/reconstruction.bin": "207f6b8a46561491ba9653f3d2638586a902dabb9c764d42fe2ccca33b0ce921",
+    "raw-light-bounces/capture/raw/return-settled/request.json": "55d49b38a617efa7459a20241489a8cc376b87feca38503ef3885376fc41f6b8",
+    "raw-light-bounces/capture/raw/return-settled/sentinel_109.bin": "f0463242831187e4bad8c25cc3f0a730db669ea958d54ec2f427fc12c4f4dc15",
+    "raw-light-bounces/capture/raw/return-settled/sentinel_37.bin": "d4aace68e43252349cccadcda7437ed2c567f51bc6dea609b51e34e7495ebddd",
+    "raw-light-bounces/capture/raw/return-settled/sentinel_97.bin": "af99c84198459d5adefcce1a637e98e05ec967e1c16ac631ab526ee2dd7bfd14",
+    "raw-light-bounces/capture/raw/return-settled/specular.bin": "705fdc24c86294baeae03477df45331101d779ebbbdf02d0cca5bf6b07750083",
+    "raw-light-bounces/capture/raw/return-settled/specular_albedo.bin": "4c7adf5f7cdd3d662c28179490becf518ea9bb611ec1432ebf9f5de1d4e103bf",
+    "raw-light-bounces/capture/raw/return-settled/specular_depth.bin": "c7e940b848da1a326366458cd6f3b674d841b21fe58339f5e5514d00ddb732d6",
+    "raw-light-bounces/capture/raw/turn-early/diffuse_albedo.bin": "848b253105fc22e83c38d31b2fda259a91ddefcb52c8deecfd95ca12f9072370",
+    "raw-light-bounces/capture/raw/turn-early/direct.bin": "05589339ea70ea604acf32baba67907cf226cbcf3be04b2e4ff88cae38148188",
+    "raw-light-bounces/capture/raw/turn-early/emission.bin": "4913c943c3cd6606b7b190bf79d8181b035217907fb1dada98409b9cadd8aef7",
+    "raw-light-bounces/capture/raw/turn-early/fog.bin": "7a407ffd8a8d87e6b92767b35425b04e7c5bf02e8317c1f7ce128407e79bf85b",
+    "raw-light-bounces/capture/raw/turn-early/hdr_after.bin": "9a07ae165c7b1976209e5cb487fd98cd4858ef9124dcaadfc84d1f932a8e3171",
+    "raw-light-bounces/capture/raw/turn-early/hdr_before.bin": "9a07ae165c7b1976209e5cb487fd98cd4858ef9124dcaadfc84d1f932a8e3171",
+    "raw-light-bounces/capture/raw/turn-early/indirect.bin": "faadb58f03fd8a7139520c9c70c60e87870da54e3a2f331726bf07e0c36c972c",
+    "raw-light-bounces/capture/raw/turn-early/indirect_surface.bin": "3a70175d01fc5a8120c5d5b900adbb8930b703ee3453be04cc8f09ce2625fb44",
+    "raw-light-bounces/capture/raw/turn-early/linear_depth.bin": "532fcf943b153ce05523aafc7fecaf904e32cdc9aa399b96b3ad3195b841815a",
+    "raw-light-bounces/capture/raw/turn-early/manifest.json": "23f1b3a166ee4ccee80e1c44e6241c54135b004ee0c5fbd90e998a10acb185b8",
+    "raw-light-bounces/capture/raw/turn-early/motion.bin": "d4d82c3d5d12d971a41779d6982c13e627b1999822e7300170b2d8517757922f",
+    "raw-light-bounces/capture/raw/turn-early/normal_roughness.bin": "30652086eb8067b112b73803bf32a4c8616cd4d19537ddf2bcf43ab1e76f3b98",
+    "raw-light-bounces/capture/raw/turn-early/primary_geometry.bin": "1c031bdae4002d39bb6c6de5e60daee24468205571e510b019971a2aea565501",
+    "raw-light-bounces/capture/raw/turn-early/primary_position.bin": "6c3d744722a4c52a3c86980454b4c72129da45d264d35ac0e059379443a5c3b4",
+    "raw-light-bounces/capture/raw/turn-early/primary_state.bin": "59bb7a789d495677d4619db2cedae66414588aae2ed04ecbbe0824b9fd4a20fb",
+    "raw-light-bounces/capture/raw/turn-early/reconstruction.bin": "1412060443eb1708da3d71bc666f39c9d9bb339c1f0a16da78b50a0b12a0be97",
+    "raw-light-bounces/capture/raw/turn-early/request.json": "6b03ccaeaca859be0138f945933ef941af1e5d1efd2754fef05c526047a0270f",
+    "raw-light-bounces/capture/raw/turn-early/sentinel_109.bin": "f0463242831187e4bad8c25cc3f0a730db669ea958d54ec2f427fc12c4f4dc15",
+    "raw-light-bounces/capture/raw/turn-early/sentinel_37.bin": "d4aace68e43252349cccadcda7437ed2c567f51bc6dea609b51e34e7495ebddd",
+    "raw-light-bounces/capture/raw/turn-early/sentinel_97.bin": "af99c84198459d5adefcce1a637e98e05ec967e1c16ac631ab526ee2dd7bfd14",
+    "raw-light-bounces/capture/raw/turn-early/specular.bin": "e5732c6c15a3c81485dc88ae79ef6b61ff840256fc3ca6297435c3cc132afcd2",
+    "raw-light-bounces/capture/raw/turn-early/specular_albedo.bin": "587991f499f5024658f5c2c0b7c37f1df9d11c9f80903cf6d28523ff715783cd",
+    "raw-light-bounces/capture/raw/turn-early/specular_depth.bin": "20a6b735c2ca443803f77bb0950f5cac69afcacd47191b1f1b759a8cc2b7c515",
+    "raw-light-bounces/capture/raw/turn-settled/diffuse_albedo.bin": "ab487a6a24992f10e806513815e9053c9570edb6909b0fc4e5f8ba8f9f4b9b37",
+    "raw-light-bounces/capture/raw/turn-settled/direct.bin": "e8c430b9085ef769e13e1e81253005d3a7c6d3a44fa545b1c891f39109a48d57",
+    "raw-light-bounces/capture/raw/turn-settled/emission.bin": "385e9ba48e15529afef64d27ec93b6183637a3462890ddd5cb69d4696cf4361b",
+    "raw-light-bounces/capture/raw/turn-settled/fog.bin": "b83e1632e762b55c5e78aebaa85c5f8cc0e68f26237e2ae4689c9f4c74de654b",
+    "raw-light-bounces/capture/raw/turn-settled/hdr_after.bin": "8d3a0f88c7f16931c61c5b3bb11274c64ba74169efd8228cb43867c3f4227661",
+    "raw-light-bounces/capture/raw/turn-settled/hdr_before.bin": "8d3a0f88c7f16931c61c5b3bb11274c64ba74169efd8228cb43867c3f4227661",
+    "raw-light-bounces/capture/raw/turn-settled/indirect.bin": "964768df532fe93c41be93d31bf7a2505d969ff7ce24061ef2a4bec462b41537",
+    "raw-light-bounces/capture/raw/turn-settled/indirect_surface.bin": "8d34c0a76ecb9d8e7dab80cad36f22f26eaff07c43edfdf8c85ccf63e464ef72",
+    "raw-light-bounces/capture/raw/turn-settled/linear_depth.bin": "7ad78614ceb639e850b7973b6c7b15a72cf9bb13d2a5728d7246ae5486bf5fc5",
+    "raw-light-bounces/capture/raw/turn-settled/manifest.json": "35a98ce907e8c011fe931039624ad3a6db1ba098e693cadf3873e852512ecf85",
+    "raw-light-bounces/capture/raw/turn-settled/motion.bin": "1bdedd3c522967d4d257eda6f6485dd2d7e3c01ff256e696cbe76a0fc3d4c7ab",
+    "raw-light-bounces/capture/raw/turn-settled/normal_roughness.bin": "b6a56880662eb90d983d62fd961861ded1b1e19572d541914d0bbfe512ac04b3",
+    "raw-light-bounces/capture/raw/turn-settled/primary_geometry.bin": "d732ed3d708a4f0535d34cb1e0672c6d6bbb811b67a3536cb32c42a451efabb7",
+    "raw-light-bounces/capture/raw/turn-settled/primary_position.bin": "fdf0bf15cb75a4411d1c0f8b10f2154bf5b43fba1cead6bbcacde9afcdfd34bb",
+    "raw-light-bounces/capture/raw/turn-settled/primary_state.bin": "11d5462e6f0128d7026f7515e547bab10b476b1ecd58c670767ad1911d7fb74e",
+    "raw-light-bounces/capture/raw/turn-settled/reconstruction.bin": "ce3aa609a5ab47316f3d9710ab16e17c246c8f8ea4661e3aa68e01635e655cf7",
+    "raw-light-bounces/capture/raw/turn-settled/request.json": "ddb43a73717ec3929249f9729b5254d6fc78d4d61e2a82700d5e797f9ede6b35",
+    "raw-light-bounces/capture/raw/turn-settled/sentinel_109.bin": "f0463242831187e4bad8c25cc3f0a730db669ea958d54ec2f427fc12c4f4dc15",
+    "raw-light-bounces/capture/raw/turn-settled/sentinel_37.bin": "d4aace68e43252349cccadcda7437ed2c567f51bc6dea609b51e34e7495ebddd",
+    "raw-light-bounces/capture/raw/turn-settled/sentinel_97.bin": "af99c84198459d5adefcce1a637e98e05ec967e1c16ac631ab526ee2dd7bfd14",
+    "raw-light-bounces/capture/raw/turn-settled/specular.bin": "eba03e35770834abb014daf6969563c8021bcfd910a1cad5ca8b4814c6e734b6",
+    "raw-light-bounces/capture/raw/turn-settled/specular_albedo.bin": "7c270195491c560fabfee1e29b1247eda471e9174acf57b3c24b60171972b363",
+    "raw-light-bounces/capture/raw/turn-settled/specular_depth.bin": "e3a7d39731e2d7de841b2b285c91c3d59ca2b87ffa1f6880299fda32db40218e"
+  }
+}

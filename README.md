@@ -29,6 +29,9 @@ An [indirect-light spatial filter](diagnostics/indirect-prefilter/README.md) pas
 synthetic GPU checks but added persistent cave speckles, and was also rejected.
 An isolated [earlier secondary cache lookup](diagnostics/first-secondary-cache/README.md)
 saved a small amount of pass time without clearly improving cave convergence.
+[Raw GPU captures](diagnostics/raw-light/README.md) now verify the failed filter's
+arithmetic and trace most extreme continuation samples to first-secondary
+emitter hits, motivating an audit of overlapping direct-light estimators.
 
 ## Results
 
