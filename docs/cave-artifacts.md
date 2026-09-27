@@ -2,8 +2,10 @@
 
 Status, September 27, 2026: a real reservoir-count defect is corrected and the
 observed spots are substantially reduced. Fine transient noise remains. The
-tested 64-candidate profile costs outdoor performance, so it is experimental and
-does not satisfy the goal of a 144 FPS minimum without distracting artifacts.
+64-candidate profile increases light-sampling cost. An initially reported outdoor
+comparison was invalid (see below), and verified outdoor tests are being rerun.
+The profile remains experimental and does not yet establish a 144 FPS minimum
+without distracting artifacts.
 
 ## Reproduction and diagnosis
 
@@ -66,19 +68,30 @@ specific to these two camera directions and must be adjusted for another scene.
 | Performance comparison | Baseline avg / 1% low | Corrected avg / 1% low |
 |---|---:|---:|
 | Cave, 144 FPS cap, ~8 s timing | 144.0 / 111.4 | 143.9 / 110.9 |
-| Outdoor walk, 260 cap, ~24 s timing | 180.7 / 136.0 | 157.1 / 119.8 |
+| Invalid walking test: player trapped in terrain, ~24 s | 180.7 / 136.0 | 157.1 / 119.8 |
 
-The outdoor average loses about 13%. GPU timestamps put initial light generation
-at about 0.34 ms before and 1.18 ms after, averaged over the final twelve
-300-frame windows of these runs. The 144 cap hides throughput headroom and
+**Correction:** those last two numbers were initially described as an outdoor
+walk and a 13% outdoor regression. End-of-run captures show the camera inside
+terrain. The movement command inherited Y=63 from the prior indoor scene instead
+of setting the outdoor starting height. The outdoor claim is withdrawn. The
+runner now fixes the start height to 76 and records actual start/end positions,
+rejecting a walking classification when horizontal travel is too small.
+
+In the invalid route, GPU timestamps put initial light generation at about
+0.34 ms before and 1.18 ms after, averaged over the final twelve 300-frame windows.
+That is useful evidence of shader cost at that camera, not outdoor throughput.
+The 144 cap hides throughput headroom and
 exposes the known client-tick pacing issue; capped 1% lows cannot establish how
-the normal VSync configuration presents frames. Outdoor results still lack the
-required headroom. No minimum-FPS claim follows from these measurements.
+the normal VSync configuration presents frames. No minimum-FPS claim follows
+from these measurements. New movement runs also use a completed 30-second log;
+the earlier short tests read a still-growing CSV partway through its default
+30-second recording interval.
 
 Brightness checks covered the base bedroom by day and night and a sealed stone
 room with one and four wall torches. They showed similar brightness and relief.
 The bedroom files were originally named `outdoor-day/night`; they are indoor
-captures. The timed walking route itself was outdoors.
+captures. The subsequent intended outdoor walking route was invalid as described
+above. The fast-turn cave capture and fixed-camera lighting checks are unaffected.
 
 ## Reproducing the experimental profile
 

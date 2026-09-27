@@ -14,7 +14,7 @@ that the original standing and movement benchmarks did not catch. Camera and sha
 are included below; they do not eliminate the light-sampling artifacts. A minimum of 144 FPS with
 no visible defects remains a target, not a verified result across gameplay. See the
 [cave investigation and optional sampling correction](docs/cave-artifacts.md) for measurements,
-reproduction steps, and the current performance tradeoff.
+reproduction steps, and a correction to an invalid outdoor-walking comparison.
 
 ## Results
 

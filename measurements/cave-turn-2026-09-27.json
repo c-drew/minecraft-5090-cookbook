@@ -81,7 +81,9 @@
         "p99_ms": 6.61319
       },
       "render_thread_cpu_percent": 42.446010664877065,
-      "gpu_utilization_mean": 99
+      "gpu_utilization_mean": 99,
+      "valid_as_outdoor_walk": false,
+      "validation_warning": "Endpoint capture shows a trapped player after inheriting cave Y=63. This is not an outdoor movement result."
     },
     {
       "scene": "lightingcheck",
@@ -105,7 +107,9 @@
         "p99_ms": 7.50273
       },
       "render_thread_cpu_percent": 37.877684972612904,
-      "gpu_utilization_mean": 99
+      "gpu_utilization_mean": 99,
+      "valid_as_outdoor_walk": false,
+      "validation_warning": "Endpoint capture shows a trapped player after inheriting cave Y=63. This is not an outdoor movement result."
     }
   ],
   "convergence": {
