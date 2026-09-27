@@ -1,0 +1,497 @@
+--- a/src/core/render/chunks.cpp
++++ b/src/core/render/chunks.cpp
+@@ -356,18 +356,33 @@
+ 
+ void ChunkBuildData::buildLightInfos(const Emission &emission) {
+     lightInfos.clear();
+-
+-    if (!collectChunkEmission) {
+-        (void)emission;
+-        return;
+-    }
+-
++    if (collectChunkEmission) { collectEmissionQuadLights(emission, vertices, id, lightInfos); }
++}
++
++void collectEmissionQuadLights(const Emission &emission,
++                               const std::vector<std::vector<vk::VertexFormat::PBRVertex>> &vertices,
++                               int64_t id, std::vector<LightInfo> &lightInfos,
++                               const std::vector<std::vector<uint32_t>> *indices) {
++    lightInfos.clear();
+     for (uint32_t geometryIndex = 0; geometryIndex < vertices.size(); geometryIndex++) {
+         auto &geometryVertices = vertices[geometryIndex];
+         if (geometryVertices.size() < 4) {
+             continue;
+         }
+ 
++        // Entity draws can also be lines or independent triangles. Only
++        // accept the renderer's exact indexed-quad layout in that path.
++        if (indices != nullptr) {
++            if (geometryIndex >= indices->size() || geometryVertices.size() % 4 != 0) { continue; }
++            const auto &idx = (*indices)[geometryIndex];
++            if (idx.size() != geometryVertices.size() / 4 * 6) { continue; }
++            bool quads = true;
++            const uint32_t pattern[6] = {0, 1, 2, 2, 3, 0};
++            for (size_t j = 0; j < idx.size(); ++j) {
++                if (idx[j] != (j / 6) * 4 + pattern[j % 6]) { quads = false; break; }
++            }
++            if (!quads) { continue; }
++        }
+         uint32_t quadIndex = 0;
+         for (size_t vertexIndex = 0; vertexIndex + 3 < geometryVertices.size(); vertexIndex += 4, quadIndex++) {
+             const auto &v0 = geometryVertices[vertexIndex + 0];
+--- a/src/core/render/emission.hpp
++++ b/src/core/render/emission.hpp
+@@ -134,3 +134,10 @@
+     mutable std::shared_mutex mtx_;
+     std::array<TextureState, kMaxTextures> texturesState_{};
+ };
++
++// Shared UV-clipped emitter extraction. The optional index check admits only
++// actual indexed quads; unsupported entity geometry keeps BSDF-hit emission.
++void collectEmissionQuadLights(const Emission &emission,
++                               const std::vector<std::vector<vk::VertexFormat::PBRVertex>> &vertices,
++                               int64_t id, std::vector<LightInfo> &lightInfos,
++                               const std::vector<std::vector<uint32_t>> *indices = nullptr);
+--- a/src/core/render/entities.cpp
++++ b/src/core/render/entities.cpp
+@@ -230,6 +230,17 @@
+     rayTracingFlag = chunkBuildData->rayTracingFlag;
+     prebuiltBLAS = chunkBuildData->prebuiltBLAS;
+     coordinate = chunkBuildData->coordinate;
++    // The first-person hand is a separate camera mesh. Sample the world
++    // player's emissive geometry, exactly as continuation rays see it.
++    if (Renderer::options.collectChunkEmission && rayTracingFlag == 2 &&
++        coordinate == World::Coordinates::WORLD) {
++        auto textures = Renderer::instance().textures();
++        auto emission = textures != nullptr ? textures->emission() : nullptr;
++        if (emission != nullptr) {
++            collectEmissionQuadLights(*emission, chunkBuildData->vertices, hashCode,
++                                      emissionLights, &chunkBuildData->indices);
++        }
++    }
+ 
+     blas = chunkBuildData->blas;
+     indexBufferAddresses =
+--- a/src/core/render/entities.hpp
++++ b/src/core/render/entities.hpp
+@@ -6,6 +6,7 @@
+ #include "core/vulkan/all_core_vulkan.hpp"
+ 
+ #include "core/render/world.hpp"
++#include "core/render/emission.hpp"
+ 
+ #include <chrono>
+ #include <condition_variable>
+@@ -105,6 +106,7 @@
+ struct EntityPostBatch;
+ 
+ struct Entity : public SharedObject<Entity> {
++    std::vector<LightInfo> emissionLights;
+     int hashCode;
+     double x, y, z;
+     int rayTracingFlag;
+--- a/src/core/render/modules/world/ray_tracing/ray_tracing_module.cpp
++++ b/src/core/render/modules/world/ray_tracing/ray_tracing_module.cpp
+@@ -533,6 +533,12 @@
+                 .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                 .descriptorCount = 1,
+                 .stageFlags = runtimeTextureStageFlags,
++            })
++            .defineDescriptorLayoutSetBinding({
++                .binding = 10,
++                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
++                .descriptorCount = 1,
++                .stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+             });
+         set1Bindings.endDescriptorLayoutSetBinding();
+         set1.endDescriptorLayoutSet();
+@@ -1890,6 +1896,9 @@
+ 
+     mcvr_gpu_timing::stamp("rt.worldPrepare");
+     worldPrepareContext->render();
++    if (worldPrepareContext->playerLightBuffer != nullptr) {
++        rayTracingDescriptorTable->bindBuffer(worldPrepareContext->playerLightBuffer, 1, 10);
++    }
+     mcvr_gpu_timing::stamp("rt.afterPrepare");
+     mcvr::drs::stampAfterPrepare(worldCommandBuffer->vkCommandBuffer());
+     if (Renderer::options.collectChunkEmission && chunks != nullptr && chunks->chunkPackedData() != nullptr) {
+--- a/src/core/render/modules/world/ray_tracing/submodules/world_prepare.cpp
++++ b/src/core/render/modules/world/ray_tracing/submodules/world_prepare.cpp
+@@ -12,6 +12,9 @@
+ #include "core/util/gpu_timing.hpp"
+ 
+ #include <algorithm>
++#include <cmath>
++#include <cstdlib>
++#include <cstring>
+ #include <filesystem>
+ #include <iostream>
+ #include <glm/gtc/type_ptr.hpp>
+@@ -163,6 +166,13 @@
+ 
+     // Entities: rebuilt every frame into the region after the chunk slots. SBT offsets are relative
+     // here and shifted past the chunk signature blocks once those are known.
++    struct PlayerLightGpu {
++        glm::vec4 p0Area, p1, p2, p3, normal, radiance;
++        glm::uvec4 source;
++    };
++    static_assert(sizeof(PlayerLightGpu) == 112);
++    static_assert(offsetof(PlayerLightGpu, source) == 96);
++    std::vector<PlayerLightGpu> playerLights;
+     std::vector<uint32_t> entityBlasOffsets;
+     std::vector<uint64_t> entityIndexAddrs, entityPositionAddrs, entityMaterialAddrs;
+     std::vector<uint64_t> entityLastIndexAddrs, entityLastPositionAddrs;
+@@ -230,6 +240,17 @@
+                 instance.flags = flags;
+                 instance.accelerationStructureReference = entities1[i]->blas->blasDeviceAddress();
+                 entityInstances.push_back(instance);
++                // WORLD-coordinate player vertices already contain rotation
++                // and scale. Match this frame's camera-relative TLAS translation.
++                const glm::vec3 translation(transform.matrix[0][3], transform.matrix[1][3], transform.matrix[2][3]);
++                for (const auto &light : entities1[i]->emissionLights) {
++                    if (!(light.area > 1e-6f) || !std::isfinite(light.area) ||
++                        !(std::max({light.radiance.r, light.radiance.g, light.radiance.b}) > 1e-6f)) { continue; }
++                    playerLights.push_back({glm::vec4(light.p0 + translation, light.area),
++                        glm::vec4(light.p1 + translation, 0), glm::vec4(light.p2 + translation, 0),
++                        glm::vec4(light.p3 + translation, 0), glm::vec4(light.normal, 0),
++                        glm::vec4(light.radiance, 0), glm::uvec4(instance.instanceCustomIndex, 0, 0, 0)});
++                }
+                 frameEntityBlases.push_back(entities1[i]->blas);
+ 
+                 entityHitIds.push_back(mcvr::HitGroupRegistry::shadowId());
+@@ -541,6 +562,50 @@
+         }
+     }
+ 
++    // Per-frame-context staging is safe after its fence, like the metadata
++    // uploads above. Always publish a header, including when the player stops
++    // holding an emissive item. Grow without silently truncating light support.
++    const size_t playerBytes = 16 + playerLights.size() * sizeof(PlayerLightGpu);
++    if (playerLightBuffer == nullptr || playerBytes > playerLightCapacity) {
++        playerLightCapacity = std::max(playerBytes * 2, size_t(4096));
++        playerLightBuffer = vk::DeviceLocalBuffer::create(vma, device, playerLightCapacity,
++                                                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
++    }
++    glm::uvec4 playerHeader(static_cast<uint32_t>(playerLights.size()), 0, 0, 0);
++    playerLightBuffer->uploadToStagingBuffer(&playerHeader, 16, 0);
++    if (!playerLights.empty()) {
++        playerLightBuffer->uploadToStagingBuffer(playerLights.data(), playerBytes - 16, 16);
++    }
++    playerLightBuffer->flushStagingBuffer();
++    const uint32_t playerQueue = physicalDevice->mainQueueIndex();
++    worldCommandBuffer->barriersBufferImage({{
++        .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
++        .srcAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
++        .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
++        .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
++        .srcQueueFamilyIndex = playerQueue, .dstQueueFamilyIndex = playerQueue,
++        .buffer = playerLightBuffer,
++    }}, {});
++    VkBufferCopy playerCopy{0, 0, playerBytes};
++    vkCmdCopyBuffer(worldCommandBuffer->vkCommandBuffer(), playerLightBuffer->vkStagingBuffer(),
++                    playerLightBuffer->vkBuffer(), 1, &playerCopy);
++    worldCommandBuffer->barriersBufferImage({{
++        .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
++        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
++        .dstStageMask = VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
++        .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
++        .srcQueueFamilyIndex = playerQueue, .dstQueueFamilyIndex = playerQueue,
++        .buffer = playerLightBuffer,
++    }}, {});
++    static const bool logPlayerLights = std::getenv("MCVR_PLAYER_LIGHT_DIAGNOSTIC") != nullptr;
++    static size_t loggedLightCount = ~size_t(0);
++    if (logPlayerLights && playerLights.size() != loggedLightCount) {
++        loggedLightCount = playerLights.size();
++        float area = 0;
++        for (const auto &light : playerLights) { area += light.p0Area.w; }
++        std::cerr << "[player-emitter] triangles=" << playerLights.size() << " area=" << area << std::endl;
++    }
++
+     if (frameInstances.empty()) {
+         tlas = nullptr;
+         previousTlasInstanceCount = 0;
+--- a/src/core/render/modules/world/ray_tracing/submodules/world_prepare.hpp
++++ b/src/core/render/modules/world/ray_tracing/submodules/world_prepare.hpp
+@@ -52,6 +52,8 @@
+     std::shared_ptr<vk::TLAS> tlas;
+     std::shared_ptr<vk::TLASBuilder> tlasBuilder;
+ 
++    std::shared_ptr<vk::DeviceLocalBuffer> playerLightBuffer;
++    size_t playerLightCapacity = 0;
+     std::shared_ptr<vk::DeviceLocalBuffer> blasOffsetsBuffer;
+     std::shared_ptr<vk::DeviceLocalBuffer> indexBufferAddr;
+     std::shared_ptr<vk::DeviceLocalBuffer> positionBufferAddr;
+--- a/src/shader/util/ray.glsl
++++ b/src/shader/util/ray.glsl
+@@ -27,6 +27,11 @@
+ // Shared hit shaders need the update/query distinction in the ray payload.
+ const uint raySharcUpdateBit = 1u << 20u;
+ const uint rayPrimaryAreaNeeBit = 1u << 21u;
++const uint rayPrimaryPlayerNeeBit = 1u << 22u;
++void raySetPrimaryPlayerNee(inout MainRay ray, bool enabled) {
++    ray.stateBits = enabled ? (ray.stateBits | rayPrimaryPlayerNeeBit) : (ray.stateBits & ~rayPrimaryPlayerNeeBit);
++}
++bool rayHasPrimaryPlayerNee(MainRay ray) { return (ray.stateBits & rayPrimaryPlayerNeeBit) != 0u; }
+ 
+ void raySetPrimaryAreaNee(inout MainRay ray, bool enabled) {
+     ray.stateBits = enabled ? (ray.stateBits | rayPrimaryAreaNeeBit) : (ray.stateBits & ~rayPrimaryAreaNeeBit);
+--- a/src/shader/world/ray_tracing/internal/advanced/common/direct_light_visibility.glsl
++++ b/src/shader/world/ray_tracing/internal/advanced/common/direct_light_visibility.glsl
+@@ -12,7 +12,7 @@
+ #    define ADV_AREA_LIGHT_VISIBILITY_DISTANCE_SHRINK 0.002
+ #endif
+ 
+-vec3 traceAreaLightReservoirTransmission(SampledSurface surface,
++vec3 traceAreaLightReservoirTransmissionMasked(SampledSurface surface,
+                                          vec2 referenceUv,
+                                          vec3 referenceWorldPos,
+                                          vec2 atlasUvMin,
+@@ -25,12 +25,12 @@
+                                          float maxDepthWorld,
+                                          vec3 sampledPoint,
+                                          vec3 sampledNormal,
+-                                         bool insideBoat) {
++                                         bool insideBoat, uint shadowMask, bool sceneLight) {
+     if (!isValidSampledSurface(surface) || !isFiniteVec3(sampledPoint) || !isFiniteVec3(sampledNormal)) {
+         return vec3(0.0);
+     }
+ 
+-    vec3 sampledPointScene = areaLightWorldToScene(sampledPoint);
++    vec3 sampledPointScene = sceneLight ? sampledPoint : areaLightWorldToScene(sampledPoint);
+     vec3 lightVector = sampledPointScene - surface.worldPos;
+     float distance2 = dot(lightVector, lightVector);
+     if (!isFiniteFloat(distance2) || distance2 <= 1e-8) { return vec3(0.0); }
+@@ -83,13 +83,29 @@
+ 
+     float shadowLength = max(distanceToLight - shadowOriginDistance - ADV_AREA_LIGHT_VISIBILITY_DISTANCE_SHRINK, 0.0001);
+     if (!isFiniteVec3(shadowOrigin) || !isFiniteFloat(shadowLength)) { return vec3(0.0); }
+-    // PLAYER_MASK is the camera's own entity; other players and mobs use WORLD_MASK.
+-    // This switch affects block-light shadows, keeping sun shadows and reflections.
+-    const uint blockLightShadowMask = WORLD_MASK | CLOUD_MASK |
+-                                      (ADV_PLAYER_BLOCK_LIGHT_SHADOWS != 0 ? PLAYER_MASK : 0);
+-    traceRayEXT(topLevelAS, gl_RayFlagsNoneEXT, blockLightShadowMask, 0, 0, 0, shadowOrigin, 0.0001,
++    traceRayEXT(topLevelAS, gl_RayFlagsNoneEXT, shadowMask, 0, 0, 0, shadowOrigin, 0.0001,
+                 sampledLightDir, shadowLength, 1);
+     return shadowRay.radiance;
+ }
+ 
++// Preserve the existing block-light shadow setting for existing callers.
++vec3 traceAreaLightReservoirTransmission(SampledSurface surface,
++                                         vec2 referenceUv,
++                                         vec3 referenceWorldPos,
++                                         vec2 atlasUvMin,
++                                         vec2 atlasUvMax,
++                                         vec3 dPduWorld,
++                                         vec3 dPdvWorld,
++                                         vec3 baseGeoNormal,
++                                         bool traceLocalHeight,
++                                         int normalTextureID,
++                                         float maxDepthWorld,
++                                         vec3 sampledPoint,
++                                         vec3 sampledNormal,
++                                         bool insideBoat) {
++    const uint mask = WORLD_MASK | CLOUD_MASK | (ADV_PLAYER_BLOCK_LIGHT_SHADOWS != 0 ? PLAYER_MASK : 0);
++    return traceAreaLightReservoirTransmissionMasked(surface, referenceUv, referenceWorldPos,
++        atlasUvMin, atlasUvMax, dPduWorld, dPdvWorld, baseGeoNormal, traceLocalHeight,
++        normalTextureID, maxDepthWorld, sampledPoint, sampledNormal, insideBoat, mask, false);
++}
+ #endif
+--- /dev/null
++++ b/src/shader/world/ray_tracing/internal/advanced/common/player_light_buffer.glsl
+@@ -0,0 +1,17 @@
++#ifndef ADV_PLAYER_LIGHT_BUFFER_GLSL
++#define ADV_PLAYER_LIGHT_BUFFER_GLSL
++struct PlayerAreaLight {
++    vec4 p0Area;
++    vec4 p1;
++    vec4 p2;
++    vec4 p3;
++    vec4 normal;
++    vec4 radiance;
++    uvec4 source;
++};
++layout(std430, set = 1, binding = 10) readonly buffer PlayerLightBuffer {
++    uvec4 playerLightHeader;
++    PlayerAreaLight playerAreaLights[];
++};
++uint playerLightCount() { return min(playerLightHeader.x, uint(playerAreaLights.length())); }
++#endif
+--- /dev/null
++++ b/src/shader/world/ray_tracing/internal/advanced/common/player_light_eval.glsl
+@@ -0,0 +1,48 @@
++#ifndef ADV_PLAYER_LIGHT_EVAL_GLSL
++#define ADV_PLAYER_LIGHT_EVAL_GLSL
++#include "common/player_light_buffer.glsl"
++
++vec3 samplePlayerAreaLight(DirectLightPreparedSurface p, vec3 viewDir, uint seed) {
++    uint chosen = 0u;
++    float totalWeight = 0.0;
++    float chosenWeight = 0.0;
++    for (uint i = 0u; i < playerLightCount(); ++i) {
++        PlayerAreaLight light = playerAreaLights[i];
++        vec3 center = (light.p0Area.xyz + light.p1.xyz + light.p2.xyz) / 3.0;
++        vec3 delta = center - p.surface.worldPos;
++        float d2 = dot(delta, delta);
++        // Do not reject by the centroid normal: a triangle can cross
++        // the receiver horizon. This weight only chooses a proposal.
++        float power = dot(light.radiance.rgb, vec3(0.2126, 0.7152, 0.0722));
++        float weight = light.p0Area.w * power / max(d2, 0.0001);
++        if (!(weight > 0.0) || isnan(weight) || isinf(weight)) { continue; }
++        totalWeight += weight;
++        if (rand(seed) * totalWeight < weight) { chosen = i; chosenWeight = weight; }
++    }
++    if (!(chosenWeight > 0.0)) { return vec3(0.0); }
++    PlayerAreaLight light = playerAreaLights[chosen];
++    float r = sqrt(rand(seed));
++    float t = rand(seed);
++    vec3 point = (1.0 - r) * light.p0Area.xyz + r * (1.0 - t) * light.p1.xyz + r * t * light.p2.xyz;
++    vec3 delta = point - p.surface.worldPos;
++    float d2 = dot(delta, delta);
++    if (!(d2 > 1e-8)) { return vec3(0.0); }
++    vec3 direction = delta * inversesqrt(d2);
++    if (dot(direction, p.surface.geometricNormal) <= 0.0) { return vec3(0.0); }
++    float facing = dot(light.normal.xyz, -direction);
++    if (!(abs(facing) > 1e-6)) { return vec3(0.0); }
++    float pdf;
++    vec3 brdf = DisneyEval(p.surface.mat, viewDir, p.surface.shadingNormal, direction, pdf);
++    if (!(pdf > 1e-6) || !isFiniteVec3(brdf)) { return vec3(0.0); }
++    vec3 visibility = traceAreaLightReservoirTransmissionMasked(p.surface, p.referenceUv,
++        p.referenceWorldPos, p.atlasUvMin, p.atlasUvMax, p.dPduWorld, p.dPdvWorld,
++        p.baseGeoNormal, p.traceLocalHeight, p.normalTextureID, p.maxDepthWorld,
++        point, facing > 0.0 ? light.normal.xyz : -light.normal.xyz,
++        rayInsideBoat(mainRay), WORLD_MASK | PLAYER_MASK | FISHING_BOBBER_MASK |
++        WEATHER_MASK | PARTICLE_MASK | CLOUD_MASK, true);
++    // Match the previous first-secondary hit's emission scale (indirect),
++    // rather than applying the stronger configured block-NEE scale.
++    return ADV_INDIRECT_LIGHT_STRENGTH * light.radiance.rgb * brdf *
++           (abs(facing) / d2) * (light.p0Area.w * totalWeight / chosenWeight) * visibility;
++}
++#endif
+--- a/src/shader/world/ray_tracing/internal/advanced/common/primary_nee_coverage.glsl
++++ b/src/shader/world/ray_tracing/internal/advanced/common/primary_nee_coverage.glsl
+@@ -2,6 +2,7 @@
+ #define ADV_PRIMARY_NEE_COVERAGE_GLSL
+ 
+ #include "common/light.glsl"
++#include "common/player_light_buffer.glsl"
+ #include "common/light_neighborhood.glsl"
+ 
+ // A conservative support test for the existing area-light proposal. This
+@@ -23,6 +24,18 @@
+     float v = (d11 * d20 - d01 * d21) / denominator;
+     float w = (d00 * d21 - d01 * d20) / denominator;
+     return v >= -0.0001 && w >= -0.0001 && v + w <= 1.0001;
++}
++
++bool playerNeeCoversEmitter(uint sourceInstance, vec3 point) {
++    for (uint i = 0u; i < playerLightCount(); ++i) {
++        PlayerAreaLight light = playerAreaLights[i];
++        if (light.source.x != sourceInstance || !(light.p0Area.w > 1e-6) ||
++            !(max(light.radiance.r, max(light.radiance.g, light.radiance.b)) > 1e-6)) { continue; }
++        // The original hit shader emits on both sides. The player sampler
++        // does too, with visibility against the player's real world mesh.
++        if (primaryNeePointOnTriangle(point, light.p0Area.xyz, light.p1.xyz, light.p2.xyz)) { return true; }
++    }
++    return false;
+ }
+ 
+ bool primaryNeeCoversEmitter(vec3 sceneOrigin, vec3 sceneHit, vec3 direction) {
+--- a/src/shader/world/ray_tracing/internal/advanced/configs.json
++++ b/src/shader/world/ray_tracing/internal/advanced/configs.json
+@@ -1499,7 +1499,8 @@
+                     "secondary_ray_state",
+                     "secondary_surface_cache",
+                     "restir_light_reservoir",
+-                    "restir_light_reservoir_source"
++                    "restir_light_reservoir_source",
++                    "primary_ray_state"
+                 ]
+             },
+             "outputs": {
+--- a/src/shader/world/ray_tracing/internal/advanced/direct_light/direct_light.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/direct_light/direct_light.rgen
+@@ -70,6 +70,7 @@
+ #include "common/direct_light_visibility.glsl"
+ #include "common/volumetric_cloud.glsl"
+ #include "common/direct_light_eval.glsl"
++#include "common/player_light_eval.glsl"
+ 
+ vec3 computeWaterDepthTransmittance(float waterDistance) {
+     if (waterDistance <= 1e-4) { return vec3(1.0); }
+@@ -172,9 +173,17 @@
+         prepared.surface, cameraRay.viewDir, prepared.referenceUv, prepared.referenceWorldPos, prepared.atlasUvMin,
+         prepared.atlasUvMax, prepared.dPduWorld, prepared.dPdvWorld, prepared.baseGeoNormal, prepared.traceLocalHeight,
+         prepared.normalTextureID, prepared.maxDepthWorld, prepared.isFftWaterSurface);
+-    vec3 directRadiance = areaLight + directionalLight;
++    uint primaryFlags = decodeFirstHitFlags(loadPrimaryRayStateLayer(pixel, 2).w);
++    bool playerNee = playerLightCount() > 0u &&
++        loadPrimaryRayStateLayer(pixel, 0).w == 1.0 && loadSecondaryRayStateLayer(pixel, 0).w == 1.0 &&
++        !hasFirstHitFlag(primaryFlags, ADV_FIRST_HIT_FLAG_HAND) &&
++        prepared.surface.mat.transmission <= EPS && prepared.surface.mat.emission <= EPS &&
++        prepared.surface.mat.roughness >= 0.5 && prepared.surface.mat.metallic < 0.5;
++    vec3 playerLight = playerNee ? samplePlayerAreaLight(prepared, cameraRay.viewDir,
++        xxhash32(uvec3(gl_LaunchIDEXT.xy, worldUBO.seed ^ 0xD271C50Bu))) : vec3(0.0);
++    vec3 directRadiance = areaLight + directionalLight + playerLight;
+     directRadiance *= directLightViewTransmittance(pixel, cameraRay, prepared, throughputState.rgb);
+     if (any(isnan(directRadiance)) || any(isinf(directRadiance))) { directRadiance = vec3(0.0); }
+ 
+-    imageStore(firstHitDiffuseDirectLightImage, pixel, vec4(max(directRadiance, 0.0), 1.0));
++    imageStore(firstHitDiffuseDirectLightImage, pixel, vec4(max(directRadiance, 0.0), playerNee ? 2.0 : 1.0));
+ }
+--- a/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
+@@ -620,6 +620,11 @@
+             primaryNeeCoversEmitter(gl_WorldRayOriginEXT, currentSurface.worldPos, gl_WorldRayDirectionEXT)) {
+             emissionFactor = 0.0;
+         }
++        if (rayHasPrimaryPlayerNee(mainRay) && !rayIsSharcUpdate(mainRay) &&
++            bounce == 1u && localBounce == 0 && currentSurface.mat.emission > EPS &&
++            playerNeeCoversEmitter(uint(gl_InstanceCustomIndexEXT), currentSurface.worldPos)) {
++            emissionFactor = 0.0;
++        }
+         vec3 emissionRadiance = emissionFactor * currentSurface.tint * currentSurface.mat.emission * mainRay.throughput;
+         emissionRadiance += currentSurface.tint * albedoEmission * mainRay.throughput;
+         mainRay.radiance += emissionRadiance;
+--- a/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
+@@ -620,6 +620,11 @@
+             primaryNeeCoversEmitter(gl_WorldRayOriginEXT, currentSurface.worldPos, gl_WorldRayDirectionEXT)) {
+             emissionFactor = 0.0;
+         }
++        if (rayHasPrimaryPlayerNee(mainRay) && !rayIsSharcUpdate(mainRay) &&
++            bounce == 1u && localBounce == 0 && currentSurface.mat.emission > EPS &&
++            playerNeeCoversEmitter(uint(gl_InstanceCustomIndexEXT), currentSurface.worldPos)) {
++            emissionFactor = 0.0;
++        }
+         vec3 emissionRadiance = emissionFactor * currentSurface.tint * currentSurface.mat.emission * mainRay.throughput;
+         emissionRadiance += currentSurface.tint * albedoEmission * mainRay.throughput;
+         mainRay.radiance += emissionRadiance;
+--- a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+@@ -757,6 +757,7 @@
+ }
+ 
+ bool primaryAreaNeeAccounted = false;
++bool primaryPlayerNeeAccounted = false;
+ 
+ void traceSecondary(inout MainRay rayState,
+                    int startBounce,
+@@ -780,6 +781,7 @@
+         uint firstBounceLobeType = b == startBounce ? rayLobeType(rayState) : 0u;
+         resetMainRay(rayState, b);
+         raySetPrimaryAreaNee(rayState, primaryAreaNeeAccounted && b == startBounce);
++        raySetPrimaryPlayerNee(rayState, primaryPlayerNeeAccounted && b == startBounce);
+         prepareSecondary(b, isHand, len, mask);
+ 
+         vec3 tracedOrigin = rayState.origin;
+@@ -1353,6 +1355,9 @@
+                     imageLoad(firstHitDiffuseDirectLightImage, pixel).a > 0.5 &&
+                     all(equal(ivec3(floor((mainRay.origin + vec3(worldUBO.cameraPos.xyz)) / 16.0)),
+                               ivec3(floor((primaryPrepared.surface.worldPos + vec3(worldUBO.cameraPos.xyz)) / 16.0))));
++                primaryPlayerNeeAccounted = startBounce == 1 && isHand == 0 &&
++                    firstHitMat.roughness >= 0.5 && firstHitMat.metallic < 0.5 && firstHitMat.emission <= EPS &&
++                    imageLoad(firstHitDiffuseDirectLightImage, pixel).a > 1.5;
+                 traceSecondary(mainRay, startBounce, isHand,
+ #    if SHARC_QUERY && USE_SHARC
+                                sharcParameters, sharcDebugBounceCount, sharcDebugCacheHit,

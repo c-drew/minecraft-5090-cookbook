@@ -1,0 +1,403 @@
+--- /dev/null
++++ b/src/shader/world/ray_tracing/internal/advanced/common/indirect_prefilter.glsl
+@@ -0,0 +1,75 @@
++#ifndef ADV_INDIRECT_PREFILTER_GLSL
++#define ADV_INDIRECT_PREFILTER_GLSL
++
++#ifndef ADV_INDIRECT_PREFILTER_RADIUS
++#define ADV_INDIRECT_PREFILTER_RADIUS 0
++#endif
++
++struct IndirectFilterSample {
++    vec3 radiance;
++    vec3 albedo;
++    vec3 position;
++    vec3 geometricNormal;
++    vec3 shadingNormal;
++    float roughness;
++    bool valid;
++};
++
++// Supplied by the runtime image loader or the independent GPU fixture.
++IndirectFilterSample loadIndirectFilterSample(ivec2 pixel);
++
++bool indirectFilterFinite(vec3 value) {
++    return !any(isnan(value)) && !any(isinf(value));
++}
++
++float indirectFilterKernel(int offset) {
++#if ADV_INDIRECT_PREFILTER_RADIUS == 1
++    return offset == 0 ? 1.0 : 0.5;
++#else
++    return offset == 0 ? 1.0 : abs(offset) == 1 ? (2.0 / 3.0) : (1.0 / 6.0);
++#endif
++}
++
++vec3 reconstructIndirect(ivec2 pixel, ivec2 resolution, IndirectFilterSample center) {
++#if ADV_INDIRECT_PREFILTER_RADIUS == 0
++    return center.radiance;
++#else
++    vec3 centerAlbedo = max(center.albedo, vec3(0.001));
++    vec3 sum = center.radiance / centerAlbedo;
++    float weightSum = 1.0;
++    for (int y = -ADV_INDIRECT_PREFILTER_RADIUS; y <= ADV_INDIRECT_PREFILTER_RADIUS; ++y) {
++        for (int x = -ADV_INDIRECT_PREFILTER_RADIUS; x <= ADV_INDIRECT_PREFILTER_RADIUS; ++x) {
++            if (x == 0 && y == 0) { continue; }
++            ivec2 neighbor = pixel + ivec2(x, y);
++            if (any(lessThan(neighbor, ivec2(0))) || any(greaterThanEqual(neighbor, resolution))) { continue; }
++            IndirectFilterSample sampleValue = loadIndirectFilterSample(neighbor);
++            if (!sampleValue.valid) { continue; }
++
++            // Symmetric plane distance prevents borrowing light across separate
++            // surfaces, including parallel foreground/background silhouettes.
++            vec3 delta = sampleValue.position - center.position;
++            float planeError = max(abs(dot(delta, center.geometricNormal)),
++                                   abs(dot(delta, sampleValue.geometricNormal)));
++            if (planeError > 0.04 || dot(center.geometricNormal, sampleValue.geometricNormal) < 0.95) { continue; }
++            float normalWeight = pow(clamp(dot(center.shadingNormal, sampleValue.shadingNormal), 0.0, 1.0), 32.0);
++            float weight = indirectFilterKernel(x) * indirectFilterKernel(y) * normalWeight *
++                exp2(-planeError * 200.0 - abs(center.roughness - sampleValue.roughness) * 16.0);
++
++            // Remove/reapply the albedo guide so texture contrast is not averaged
++            // with the illumination. No luminance/firefly clamp is introduced.
++            sum += weight * sampleValue.radiance / max(sampleValue.albedo, vec3(0.001));
++            weightSum += weight;
++        }
++    }
++    vec3 reconstructed = centerAlbedo * (sum / weightSum);
++    return indirectFilterFinite(reconstructed) ? reconstructed : center.radiance;
++#endif
++}
++
++vec3 composeReconstructedIndirect(vec3 hdr, vec3 original, vec3 reconstructed, vec3 transmission) {
++    // The HDR image already contains the original continuation, direct light,
++    // emission and additive fog. Replace just the transmitted continuation.
++    return hdr + (reconstructed - original) * transmission;
++}
++
++#endif
+--- a/src/shader/world/ray_tracing/internal/advanced/configs.json
++++ b/src/shader/world/ray_tracing/internal/advanced/configs.json
+@@ -704,6 +704,26 @@
+             "storage_binding": 32,
+             "filter": "linear",
+             "address_mode": "clamp_to_edge"
++        },
++        {
++            "name": "indirect_reconstruction",
++            "type": "intermediate",
++            "dimension": "2d_array",
++            "format": "R16G16B16A16_SFLOAT",
++            "width": "RENDER_WIDTH",
++            "height": "RENDER_HEIGHT",
++            "depth": 2,
++            "storage_binding": 36
++        },
++        {
++            "name": "indirect_surface",
++            "type": "intermediate",
++            "dimension": "2d_array",
++            "format": "R32G32B32A32_SFLOAT",
++            "width": "RENDER_WIDTH",
++            "height": "RENDER_HEIGHT",
++            "depth": 2,
++            "storage_binding": 37
+         }
+     ],
+     "buffers": [
+@@ -899,6 +919,9 @@
+             },
+             {
+                 "pass": "final_compose"
++            },
++            {
++                "pass": "indirect_prefilter"
+             }
+         ]
+     },
+@@ -1476,7 +1499,8 @@
+                     "secondary_ray_state",
+                     "secondary_surface_cache",
+                     "restir_light_reservoir",
+-                    "restir_light_reservoir_source"
++                    "restir_light_reservoir_source",
++                    "primary_ray_state"
+                 ]
+             },
+             "outputs": {
+@@ -1499,8 +1523,7 @@
+                     "secondary_ray_state",
+                     "secondary_surface_cache",
+                     "restir_light_reservoir",
+-                    "restir_light_reservoir_source",
+-                    "primary_ray_state"
++                    "restir_light_reservoir_source"
+                 ]
+             },
+             "outputs": {
+@@ -1974,7 +1997,9 @@
+                     "out:fog_image",
+                     "out:first_hit_refraction",
+                     "post_star_cloud_transmittance",
+-                    "material_state"
++                    "material_state",
++                    "indirect_reconstruction",
++                    "indirect_surface"
+                 ]
+             },
+             "rgen": "world/world.rgen",
+@@ -2330,6 +2355,29 @@
+                 "ADV_POST_DOF_DIRECTION_X": "0.0",
+                 "ADV_POST_DOF_DIRECTION_Y": "1.0"
+             }
++        },
++        {
++            "type": "compute",
++            "name": "indirect_prefilter",
++            "inputs": {
++                "images": [
++                    "out:radiance",
++                    "out:diffuse_albedo_metallic",
++                    "out:specular_albedo",
++                    "out:normal_roughness",
++                    "primary_surface_cache",
++                    "indirect_reconstruction"
++                ]
++            },
++            "outputs": {
++                "images": [
++                    "out:radiance"
++                ]
++            },
++            "compute": "indirect_prefilter.comp",
++            "gx": "(RENDER_WIDTH + 7) / 8",
++            "gy": "(RENDER_HEIGHT + 7) / 8",
++            "gz": "1"
+         }
+     ]
+ }
+--- /dev/null
++++ b/src/shader/world/ray_tracing/internal/advanced/indirect_prefilter.comp
+@@ -0,0 +1,54 @@
++#version 460
++#extension GL_GOOGLE_include_directive : require
++
++#include "common/shared.hpp"
++#include "common/render_size.glsl"
++#include "common/indirect_prefilter.glsl"
++
++layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
++layout(set = 2, binding = 0) uniform WorldUniform { WorldUBO worldUBO; };
++layout(set = 3, binding = 0, rgba16f) uniform image2D outputImage;
++layout(set = 3, binding = 1, rgba8) uniform readonly image2D diffuseAlbedoImage;
++layout(set = 3, binding = 2, rgba8) uniform readonly image2D specularAlbedoImage;
++layout(set = 3, binding = 3, rgba16f) uniform readonly image2D normalRoughnessImage;
++layout(set = 5, binding = 3, rgba32f) uniform readonly image2DArray primarySurfaceCacheImage;
++layout(set = 5, binding = 36, rgba16f) uniform readonly image2DArray indirectReconstructionImage;
++
++IndirectFilterSample loadIndirectFilterSample(ivec2 pixel) {
++    vec4 raw = imageLoad(indirectReconstructionImage, ivec3(pixel, 0));
++    IndirectFilterSample value = IndirectFilterSample(raw.rgb, vec3(1.0), vec3(0.0),
++        vec3(0.0, 0.0, 1.0), vec3(0.0, 0.0, 1.0), 1.0, raw.a > 0.5);
++    if (!value.valid) { return value; }
++    vec4 normalRoughness = imageLoad(normalRoughnessImage, pixel);
++    vec3 geometricNormal = imageLoad(primarySurfaceCacheImage, ivec3(pixel, 3)).xyz;
++    value.position = imageLoad(primarySurfaceCacheImage, ivec3(pixel, 0)).xyz;
++    value.albedo = imageLoad(diffuseAlbedoImage, pixel).rgb + imageLoad(specularAlbedoImage, pixel).rgb;
++    value.roughness = normalRoughness.a;
++    value.valid = indirectFilterFinite(raw.rgb) && all(greaterThanEqual(raw.rgb, vec3(0.0))) &&
++        indirectFilterFinite(value.position) && indirectFilterFinite(normalRoughness.xyz) &&
++        indirectFilterFinite(geometricNormal) && !isnan(value.roughness) && !isinf(value.roughness) &&
++        dot(normalRoughness.xyz, normalRoughness.xyz) > 1e-6 && dot(geometricNormal, geometricNormal) > 1e-6;
++    if (value.valid) {
++        value.shadingNormal = normalize(normalRoughness.xyz);
++        value.geometricNormal = normalize(geometricNormal);
++    }
++    return value;
++}
++
++void main() {
++#if ADV_INDIRECT_PREFILTER_RADIUS != 0
++    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
++    ivec2 resolution = min(imageSize(outputImage), advUnpackRenderSize(worldUBO.renderSizePacked, imageSize(outputImage)));
++    if (any(greaterThanEqual(pixel, resolution))) { return; }
++    vec4 transmission = imageLoad(indirectReconstructionImage, ivec3(pixel, 1));
++    if (transmission.a < 0.5 || !indirectFilterFinite(transmission.rgb)) { return; }
++    IndirectFilterSample center = loadIndirectFilterSample(pixel);
++    if (!center.valid) { return; }
++    vec4 hdr = imageLoad(outputImage, pixel);
++    vec3 reconstructed = reconstructIndirect(pixel, resolution, center);
++    vec3 composed = composeReconstructedIndirect(hdr.rgb, center.radiance, reconstructed, transmission.rgb);
++    if (indirectFilterFinite(composed) && all(lessThanEqual(composed, vec3(65504.0)))) {
++        imageStore(outputImage, pixel, vec4(max(composed, vec3(0.0)), hdr.a));
++    }
++#endif
++}
+--- a/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
+@@ -625,6 +625,11 @@
+             playerNeeCoversEmitter(uint(gl_InstanceCustomIndexEXT), currentSurface.worldPos)) {
+             emissionFactor = 0.0;
+         }
++        if (bounce == 1u && !rayIsSharcUpdate(mainRay)) {
++            bool covered = playerNeeCoversEmitter(uint(gl_InstanceCustomIndexEXT), currentSurface.worldPos);
++            mainRay.prevScenePos = vec3((rayHasPrimaryPlayerNee(mainRay) ? 1.0 : 0.0) + (covered ? 2.0 : 0.0),
++                                       emissionFactor, currentSurface.mat.emission);
++        }
+         vec3 emissionRadiance = emissionFactor * currentSurface.tint * currentSurface.mat.emission * mainRay.throughput;
+         emissionRadiance += currentSurface.tint * albedoEmission * mainRay.throughput;
+         mainRay.radiance += emissionRadiance;
+--- a/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
+@@ -625,6 +625,11 @@
+             playerNeeCoversEmitter(uint(gl_InstanceCustomIndexEXT), currentSurface.worldPos)) {
+             emissionFactor = 0.0;
+         }
++        if (bounce == 1u && !rayIsSharcUpdate(mainRay)) {
++            bool covered = playerNeeCoversEmitter(uint(gl_InstanceCustomIndexEXT), currentSurface.worldPos);
++            mainRay.prevScenePos = vec3((rayHasPrimaryPlayerNee(mainRay) ? 1.0 : 0.0) + (covered ? 2.0 : 0.0),
++                                       emissionFactor, currentSurface.mat.emission);
++        }
+         vec3 emissionRadiance = emissionFactor * currentSurface.tint * currentSurface.mat.emission * mainRay.throughput;
+         emissionRadiance += currentSurface.tint * albedoEmission * mainRay.throughput;
+         mainRay.radiance += emissionRadiance;
+--- a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+@@ -129,6 +129,12 @@
+ layout(set = 5, binding = 20, rgba16f) uniform readonly image2D volumetricLightImage;
+ layout(set = 5, binding = 34, rgba16f) uniform readonly image2D volumetricCloudTemporalImage;
+ layout(set = 5, binding = 32, r16f) uniform image2D postStarCloudTransmittanceImage;
++layout(set = 5, binding = 36, rgba16f) uniform image2DArray indirectReconstructionImage;
++layout(set = 5, binding = 37, rgba32f) uniform image2DArray indirectSourceImage;
++vec4 sourceLuminance = vec4(0.0);
++vec4 sourceMetadata = vec4(0.0, 0.0, 0.0, -1.0);
++float sourceY(vec3 rgb) { return dot(rgb, vec3(0.2126, 0.7152, 0.0722)); }
++
+ 
+ #define CONST_ONLY
+ #include "util/vertex.glsl"
+@@ -770,6 +776,7 @@
+                    out bool hasSecondHit,
+                    out float secondHitDistance) {
+     bool isPrimaryCameraPath = true;
++    sourceMetadata = vec4(primaryPlayerNeeAccounted ? 1.0 : 0.0, 0.0, 0.0, 0.0);
+     hasSecondHit = false;
+     secondHitDistance = 0.0;
+ 
+@@ -786,10 +793,10 @@
+ 
+         vec3 tracedOrigin = rayState.origin;
+         vec3 tracedDirection = rayState.direction;
++        vec3 radianceBeforeHit = rayState.radiance;
++
+ #if SHARC_QUERY && USE_SHARC
+-        // Cached outgoing radiance replaces this hit's shading. Weight it by
+-        // the incoming path throughput, before sampling this hit's BSDF.
+-        vec3 radianceBeforeHit = rayState.radiance;
++        // Preserve the existing cache query weighting exactly.
+         vec3 throughputBeforeHit = rayState.throughput;
+ #endif
+         mainRay = rayState;
+@@ -804,6 +811,7 @@
+         }
+         traceRayEXT(topLevelAS, ADV_RAY_FLAGS, mask, 1, 1, missId, mainRay.origin, 0.001, mainRay.direction, len, 0);
+         rayState = mainRay;
++        if (b == 1 && b == startBounce) { sourceMetadata.yzw = rayState.prevScenePos; }
+         raySetIgnoreWaterSelf(rayState, false);
+ 
+         if (b == startBounce) {
+@@ -825,13 +833,19 @@
+                 if (SharcGetCachedRadiance(sharcParameters, sharcHitData, cachedRadiance, false)) {
+                     sharcCacheHit = true;
+                     rayState.radiance = radianceBeforeHit + cachedRadiance * throughputBeforeHit;
++                    sourceLuminance.z += sourceY(rayState.radiance - radianceBeforeHit);
+                     break;
+                 }
+             }
+             sharcDebugBounceCount = max(sharcDebugBounceCount, b + 1);
+ #endif
++            sourceLuminance.x += sourceY(rayState.directLightRadiance);
++            sourceLuminance.y += sourceY(rayState.radiance - radianceBeforeHit - rayState.directLightRadiance);
++
+             bool isPerfectMirrorOrTransparent = (hitMat.roughness < 0.02) && (rayLobeType(rayState) != 0u);
+             if (!isPerfectMirrorOrTransparent) { isPrimaryCameraPath = false; }
++        } else {
++            sourceLuminance.w += sourceY(rayState.radiance - radianceBeforeHit);
+         }
+ 
+         if (b > 2) {
+@@ -1063,6 +1077,14 @@
+     traceSharcUpdate(pixel, resolution, origin, direction, fovY, fovX, rayFlags);
+     return;
+ #else
++#    if ADV_WORLD_PASS == ADV_WORLD_PASS_FINAL_COMPOSE
++    // Clear before any sky/primary early exit. Cache update dispatches never
++    // write this current-view reconstruction data.
++    imageStore(indirectReconstructionImage, ivec3(pixel, 0), vec4(0.0));
++    imageStore(indirectReconstructionImage, ivec3(pixel, 1), vec4(0.0));
++    imageStore(indirectSourceImage, ivec3(pixel, 0), vec4(0.0));
++    imageStore(indirectSourceImage, ivec3(pixel, 1), vec4(0.0));
++#    endif
+     float surfaceDepth = INF_DISTANCE;
+     bool psrHitSky = false;
+     vec3 psrHitPosition = eyePos;
+@@ -1377,6 +1399,24 @@
+     return;
+ #    else
+ 
++    // Reconstruct the complete continuation estimator at rough opaque first
++    // hits, including both sampled lobes; do not condition neighbors on which
++    // random BSDF lobe happened to be chosen. Direct light/emission stay separate.
++    bool indirectFilterEligible = !hitSky && isFirstHitNoisy && !isFirstHitTransparent &&
++        primarySurfaceCache.valid && startBounce == 1 && isHand == 0 &&
++        firstHitMat.roughness >= 0.5 && firstHitMat.metallic < 0.5 && firstHitMat.emission <= EPS &&
++        isFiniteVec3(mainRay.radiance);
++#    if SHARC_QUERY && USE_SHARC
++    indirectFilterEligible = indirectFilterEligible && sharcConfig.debugMode == 0u;
++#    endif
++    imageStore(indirectReconstructionImage, ivec3(pixel, 0),
++               vec4(indirectFilterEligible ? mainRay.radiance : vec3(0.0), indirectFilterEligible ? 1.0 : 0.0));
++    if (indirectFilterEligible) {
++        imageStore(indirectSourceImage, ivec3(pixel, 0), sourceLuminance);
++        imageStore(indirectSourceImage, ivec3(pixel, 1), sourceMetadata);
++    }
++    vec3 indirectCompositionWeight = vec3(1.0);
++
+     if (!hitSky && isFirstHitNoisy && !isFirstHitTransparent) {
+         if (isFirstHitDiffuse) { firstHitIndirectRadiance = mainRay.radiance; }
+         mainRay.radiance += firstHitEmission + firstHitDirectRadiance;
+@@ -1394,6 +1434,7 @@
+     if (!raySkipFog(mainRay)) {
+         if (skyUBO.cameraSubmersionType == 1) {
+             vec3 waterColor = vec3(0.0, 0.48, 0.65);
++            indirectCompositionWeight *= waterColor;
+             vec3 preFogRadiance = mainRay.radiance * waterColor;
+ 
+             if (surfaceDepth == INF_DISTANCE) surfaceDepth = 0;
+@@ -1456,6 +1497,9 @@
+         }
+     }
+ 
++    if (!isFirstHitTransparent && composeFogTransmittance >= 0.0) {
++        indirectCompositionWeight *= composeFogTransmittance;
++    }
+     if (isFirstHitTransparent) {
+         firstHitEmission += transparentFogAdditive;
+         mainRay.radiance = transparentReflectionRadiance + transparentRefractionRadiance + firstHitEmission;
+@@ -1511,6 +1555,7 @@
+         vec3 volumetricTransmittance = integrateVolumetricFogTransmittance(volumetricDistance, false);
+         vec3 volumetricLight = sampleVolumetricLight(pixel);
+         mainRay.radiance = mainRay.radiance * volumetricTransmittance + volumetricLight;
++        indirectCompositionWeight *= volumetricTransmittance;
+ 
+         if (!isFirstHitTransparent) {
+             composeFogTransmittance = clamp(volumetricLightLuminance(volumetricTransmittance), 0.0, 1.0);
+@@ -1553,6 +1598,8 @@
+     if (isnan(mainRay.radiance.r) || isinf(mainRay.radiance.r)) { mainRay.radiance = vec3(0.0, 0.0, 0.0); }
+     if (isnan(mainRay.radiance.g) || isinf(mainRay.radiance.g)) { mainRay.radiance = vec3(0.0, 0.0, 0.0); }
+     if (isnan(mainRay.radiance.b) || isinf(mainRay.radiance.b)) { mainRay.radiance = vec3(0.0, 0.0, 0.0); }
++    imageStore(indirectReconstructionImage, ivec3(pixel, 1),
++               vec4(indirectCompositionWeight, indirectFilterEligible ? 1.0 : 0.0));
+     imageStore(outputImage, ivec2(pixel), vec4(mainRay.radiance, 1.0));
+ #    endif
+ #endif

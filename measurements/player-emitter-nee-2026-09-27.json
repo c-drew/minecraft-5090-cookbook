@@ -1,0 +1,167 @@
+{
+  "date": "2026-09-27",
+  "installed": false,
+  "selected_jar_sha256": "99c78c0eb5399cb73a92f7430ee03726a0a4cfb634acbf8d8d2639f847e2d777",
+  "release": {
+    "jar": "Radiance-player-emitter-nee.jar",
+    "sha256": "40614eb5cb739392eb8d0c0f7fe3b498705b604087986c2594405ede75a292aa",
+    "native_sha256": "9da450d7ad507412639b2b1c13ba337e7aa92ded8affa5737aef246ab5108759",
+    "changed_jar_entries": [
+      "libcore.so",
+      "shaders/world/ray_tracing/advanced.zip"
+    ],
+    "changed_shader_entries": [
+      "common/direct_light_visibility.glsl",
+      "common/player_light_buffer.glsl",
+      "common/player_light_eval.glsl",
+      "common/primary_nee_coverage.glsl",
+      "configs.json",
+      "direct_light/direct_light.rgen",
+      "util/ray.glsl",
+      "world/default.rchit",
+      "world/no_height.rchit",
+      "world/world.rgen"
+    ],
+    "installed": false
+  },
+  "raw": {
+    "jar": "Radiance-player-emitter-nee-raw.jar",
+    "sha256": "84c62fcd5b5af515ca45527217f52f7ce200539f048d5372db1ef73ff55401c1",
+    "native_sha256": "ea28b58df7fd72dddaadbd81571c1efb0c65bd92587571348d649d763a74c508",
+    "changed_jar_entries": [
+      "libcore.so",
+      "shaders/world/ray_tracing/advanced.zip"
+    ],
+    "changed_shader_entries": [
+      "common/direct_light_visibility.glsl",
+      "common/player_light_buffer.glsl",
+      "common/player_light_eval.glsl",
+      "common/primary_nee_coverage.glsl",
+      "configs.json",
+      "direct_light/direct_light.rgen",
+      "util/ray.glsl",
+      "world/default.rchit",
+      "world/no_height.rchit",
+      "world/world.rgen"
+    ],
+    "installed": false
+  },
+  "comparison": {
+    "control": {
+      "all": {
+        "relative_rms": {
+          "0.05": 0.024873792262175048,
+          "0.3": 0.017676289778227768,
+          "1.2": 0.010812146564088432
+        },
+        "settled_luma": 61.086894418375834
+      },
+      "turn": {
+        "relative_rms": {
+          "0.05": 0.019662112399095197,
+          "0.3": 0.011979755497366722,
+          "1.2": 0.007947251883762337
+        },
+        "settled_luma": 79.71168414660886
+      },
+      "return": {
+        "relative_rms": {
+          "0.05": 0.0300854721252549,
+          "0.3": 0.02337282405908881,
+          "1.2": 0.013677041244414528
+        },
+        "settled_luma": 42.46210469014281
+      },
+      "final_1000_capped_gpu_ms": {
+        "rt.pass.final_compose": 1.2214227,
+        "rt.pass.direct_light": 0.1971802
+      }
+    },
+    "candidate": {
+      "all": {
+        "relative_rms": {
+          "0.05": 0.0268090288190708,
+          "0.3": 0.017679402842461965,
+          "1.2": 0.010730735130842422
+        },
+        "settled_luma": 61.10640359660128
+      },
+      "turn": {
+        "relative_rms": {
+          "0.05": 0.022360202760425583,
+          "0.3": 0.012444150874283032,
+          "1.2": 0.008057833716550224
+        },
+        "settled_luma": 79.7224732329002
+      },
+      "return": {
+        "relative_rms": {
+          "0.05": 0.03125785487771601,
+          "0.3": 0.022914654810640894,
+          "1.2": 0.013403636545134618
+        },
+        "settled_luma": 42.49033396030237
+      },
+      "final_1000_capped_gpu_ms": {
+        "rt.pass.final_compose": 1.2299474,
+        "rt.pass.direct_light": 0.2857808
+      }
+    }
+  },
+  "raw_coverage": [
+    {
+      "id": "idle",
+      "first_emissive": 197,
+      "covered": 54,
+      "covered_emission_factor_values": [
+        0.0
+      ],
+      "first_emissive_and_hit_other_y_gt1": 0,
+      "bright_and_covered": 0,
+      "source_composition_passed": true
+    },
+    {
+      "id": "return-settled",
+      "first_emissive": 255,
+      "covered": 86,
+      "covered_emission_factor_values": [
+        0.0
+      ],
+      "first_emissive_and_hit_other_y_gt1": 4,
+      "bright_and_covered": 0,
+      "source_composition_passed": true
+    },
+    {
+      "id": "turn-early",
+      "first_emissive": 1831,
+      "covered": 0,
+      "covered_emission_factor_values": [],
+      "first_emissive_and_hit_other_y_gt1": 0,
+      "bright_and_covered": 0,
+      "source_composition_passed": true
+    },
+    {
+      "id": "turn-settled",
+      "first_emissive": 1899,
+      "covered": 0,
+      "covered_emission_factor_values": [],
+      "first_emissive_and_hit_other_y_gt1": 0,
+      "bright_and_covered": 0,
+      "source_composition_passed": true
+    }
+  ],
+  "shader_jobs": {
+    "release": 173,
+    "raw": 174
+  },
+  "confirmed_khronos_instance_device_and_sync_validation_clean": true,
+  "public_replay": {
+    "shader_bytes_exact": true,
+    "native_text_exact_after_crlf_normalization": true
+  },
+  "limitations": [
+    "One six-turn pair with validation enabled; not selected.",
+    "No material-room, outdoor, uncapped performance or physical-display validation.",
+    "Raw frames are independent samples, not a paired variance comparison."
+  ]
+}
