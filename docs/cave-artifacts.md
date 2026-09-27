@@ -106,13 +106,14 @@ Close the game and back up the jar, shader settings, `fork.properties`, and DLSS
 libraries before installing. Use
 [`config/experimental/cave-counts/advanced.zip.txt`](../config/experimental/cave-counts/advanced.zip.txt)
 and [`fork.properties`](../config/experimental/cave-counts/fork.properties).
-The three relevant shader settings are `initial_samples=48`,
-`direct_light_strength=32.0`, and `player_block_light_shadows=render_pipeline.false`.
+The relevant shader settings are `initial_samples=48`,
+`direct_light_strength=32.0`, `temporal_confidence_cap=8.0`, and
+`player_block_light_shadows=render_pipeline.false`.
 The sample count is light candidates per pixel, not full path samples.
 
 The current optional stack includes the count correction and the sampling
 optimization below. To reproduce the earlier count-only comparison, apply only
-experimental patch 0001 and use 64 candidates.
+experimental patch 0001 and use 64 candidates with history cap 24.
 
 Download Linux SR and RR libraries from the official
 [NVIDIA DLSS 310.9.1 release](https://github.com/NVIDIA/DLSS/tree/v310.9.1/lib/Linux_x86_64/rel).
@@ -194,6 +195,43 @@ jar changes only the advanced shader archive; Java/native bytes are preserved.
 Its SHA256 is `0a74c082111f70e404a319d88ce65ba2f9392d33b5f55922db78f5b0b3a18271`.
 See [sampling measurements](../measurements/cave-sampling-2026-09-27.json) for
 full precision, configuration, convergence events and valid movement records.
+
+## Shorter reservoir history
+
+The selected settings additionally lower `temporal_confidence_cap` from 24 to 8.
+The shader limits temporal carry to one quarter of this cap, with a minimum of
+one, so this reduces the maximum previous-reservoir merge count from 6 to 2.
+It also lowers the spatial output confidence cap. This affects reservoir
+resampling history; it does not blur the rendered image or change DLSS's history
+settings. Final shading, shadows and render resolution remain unchanged.
+
+| Mean relative wall RMS | Optimized 48, cap 24 (6 turns) | Cap 8 (12 turns, two launches) |
+|---|---:|---:|
+| 50 ms | 0.03814 | 0.03320 |
+| 150 ms | 0.03036 | 0.02622 |
+| 300 ms | 0.02417 | 0.02210 |
+| 600 ms | 0.01781 | 0.01629 |
+| 1.2 s | 0.01225 | 0.01166 |
+| 2.3 s | 0.00352 | 0.00356 |
+
+The improvement repeated, with nearly unchanged settled brightness (82.23/44.00
+versus 82.06/43.76). Early convergence improves by about 13% over the optimized
+cap-24 profile, and 66% versus the original faulty sampler by this metric.
+Some settling noise remains. Cap 4 gave similar early convergence but somewhat
+more settled noise, so cap 8 was retained. These figures do not establish a
+perceptual threshold or guarantee that every scene is artifact-free.
+
+The cap-8 forest repeats averaged 221.8 / 221.7 FPS, with 1% lows of
+166.6 / 181.6 FPS. Both traveled the same verified 190.8 blocks. Five of
+13,192 frames exceeded 6.944 ms; the worst was 11.55 ms. Throughput is comparable
+to cap 24, and the strict frame-time floor remains unproven.
+The gold/copper/glass/water comparison was repeated with cap 8. Surface relief,
+lighting and reflections remained comparable; crop-mean luma differences from
+the count-64 profile were +0.165, +0.114 and -0.115 on the 8-bit scale.
+
+A diagnostic with three visibility-tested RIS groups of 16 candidates, instead
+of one group of 48, did not materially improve convergence. That shader change
+was rejected and is not part of the published patch stack.
 
 To roll back, close the game and restore the saved jar and its corresponding
 settings together. Restoring only the jar while leaving strength 32 can greatly

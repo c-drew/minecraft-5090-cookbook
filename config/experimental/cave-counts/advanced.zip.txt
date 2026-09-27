@@ -31,7 +31,7 @@ render_pipeline.module.ray_tracing.attribute.spatial_reuse_disocclusion_boost_sa
 render_pipeline.module.ray_tracing.attribute.spatial_reuse_radius=32
 render_pipeline.module.ray_tracing.attribute.spatial_reuse_samples=4
 render_pipeline.module.ray_tracing.attribute.sun_radiance=8.0,8.0,8.0
-render_pipeline.module.ray_tracing.attribute.temporal_confidence_cap=24.0
+render_pipeline.module.ray_tracing.attribute.temporal_confidence_cap=8.0
 render_pipeline.module.ray_tracing.attribute.volumetric_cloud_ambient_steps=8
 render_pipeline.module.ray_tracing.attribute.volumetric_cloud_ambient_strength=1.0
 render_pipeline.module.ray_tracing.attribute.volumetric_cloud_base_scale=0.30
