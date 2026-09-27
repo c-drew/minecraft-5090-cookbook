@@ -404,3 +404,46 @@ the preceding optimized jar while keeping its matching settings. The later
 [frame scheduling change](frame-slots.md) has its own jar-only rollback, which
 must run first if installed. Revert the cache step before the earlier
 sampling/count steps.
+
+
+## Further rapid-turn diagnostics
+
+Three follow-ups did not usefully reduce the remaining noise. Each comparison
+used its own six-turn control, the same installed lighting profile, a 144 FPS
+rendering cap and 60 FPS capture. The diagnostic builds were never installed.
+
+| Relative wall RMS, control → treatment | 50 ms | 300 ms |
+|---|---:|---:|
+| RR history reset during/just after rapid rotation |0.03146→0.03223|0.02140→0.02179|
+| Cache-update density: one pixel per 5×5 block → 3×3 |0.03091→0.03079|0.02083→0.02103|
+| A quarter of cache updates aimed at the opposite view |0.03079→0.03110|0.02071→0.02102|
+
+The reset probe's final repeat logged 27 reset episodes to retained stderr.
+An earlier stdout marker was discarded by the private launcher, so that initial
+enabled run did not independently establish activation. The confirmed repeat
+did. This rejects that reset policy, not every possible RR history change.
+
+The first density comparison was also invalid: Java silently removed the
+native-recognized field because the module descriptor did not expose it. The
+corrected test changed only the descriptor, then verified the requested value
+in the saved configuration. Mean GPU update cost rose from 0.1381 to 0.2136 ms
+in the final 1,200 frames, with no useful image gain. The local harness now rejects
+these native options when the selected jar does not declare them.
+
+The opposite-view probe redirected 25% of the existing update budget behind
+the camera. Camera/query rays and throughput weights stayed unchanged. All 92
+affected shader variants compiled; settled luma changed from 81.98/43.53 to
+81.99/43.73. It also gave no useful convergence gain. These results leave the
+installed cache density and update directions unchanged. See the
+[scoped follow-up measurements](../measurements/cave-followups-2026-09-27.json).
+
+A separate shader-counter audit found 115 failed cache allocations before the
+six-turn recording and the same displayed total afterward. This exposed a
+source error: failed insertion returns slot 0, and its caller ignores the
+failure flag, allowing an unrelated cache entry to be used. The observation
+does not link that failure path to the rapid-turn spots. The settled binary
+overlay is an observation through RR/tone mapping, not raw buffer readback;
+a targeted overflow correctness test and fix remain outstanding. The overlay
+also makes this run unsuitable for convergence or performance scoring.
+[Optional diagnostic patches and activation checks](../diagnostics/cave-followups/README.md)
+are kept outside the production series.

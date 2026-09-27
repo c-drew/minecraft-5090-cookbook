@@ -1,0 +1,15 @@
+--- a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+@@ -1052,6 +1052,12 @@
+     const uint rayFlags = ADV_RAY_FLAGS;
+ 
+ #if USE_SHARC && SHARC_UPDATE
++    // Private diagnostic: keep surfaces behind the camera represented in the
++    // cache, using one quarter of the existing update rays. Camera rendering
++    // and cache-query rays are unchanged; each update segment keeps its normal
++    // radiance/throughput calculation.
++    uint oppositeViewSeed = xxhash32(uvec3(gl_LaunchIDEXT.xy, worldUBO.seed ^ 0x6A09E667u));
++    if ((oppositeViewSeed & 3u) == 0u) { direction = -direction; }
+     traceSharcUpdate(pixel, resolution, origin, direction, fovY, fovX, rayFlags);
+     return;
+ #else

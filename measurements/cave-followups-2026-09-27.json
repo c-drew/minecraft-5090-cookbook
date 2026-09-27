@@ -1,0 +1,158 @@
+{
+  "date": "2026-09-27",
+  "scope": "Independent six-turn paired cave diagnostics; 2560x1440 capture at60FPS, renderer capped144FPS,1334x750 rays. RMS compares each exposure-normalized wall crop with its own settled reference; not artifact counts or absolute quality. Post-capture8s static timing is not a performance-floor test. No diagnostic installed.",
+  "delays_s": [
+    0.05,
+    0.15,
+    0.3,
+    0.6,
+    1.2,
+    2.3
+  ],
+  "profile": {
+    "initial_candidates": 48,
+    "history_cap": 8,
+    "direct_light_strength": 32,
+    "bounces": 4,
+    "sharc": true,
+    "dlss": "310.9.1",
+    "requested_rr_preset": "F",
+    "voxy": "v17",
+    "resource_pack": "SPBR18_8Legacy"
+  },
+  "rr_reset": {
+    "policy": "Reset at interframe camera rotation>=5degrees and first following frame.",
+    "disabled": {
+      "rms_relative": [
+        0.03145813022784458,
+        0.025249865020454433,
+        0.02139789690773175,
+        0.015793198594737035,
+        0.011535716055740986,
+        0.003624035117162169
+      ],
+      "settled_luma": [
+        82.00682280568124,
+        43.51161222259009
+      ],
+      "activation_verified": false
+    },
+    "verified_enabled": {
+      "rms_relative": [
+        0.0322308848399411,
+        0.025691077869220303,
+        0.021794924277649994,
+        0.016199327005684057,
+        0.011670529994283174,
+        0.003510360357625953
+      ],
+      "settled_luma": [
+        81.99681309419104,
+        43.55239855476181
+      ],
+      "activation_verified": true
+    },
+    "confirmed_reset_episodes": 27,
+    "logging_limitation": "Native stdout was discarded by the direct launcher. The enabled-logged repeat routes markers to retained stderr; only this repeat verifies activation.",
+    "decision": "Rejected: confirmed resets provide no meaningful post-turn convergence gain. No production changes."
+  },
+  "cache_density": {
+    "5": {
+      "rms_relative": [
+        0.030908964670879405,
+        0.024488917329249793,
+        0.02083331844051046,
+        0.015788476229310396,
+        0.011552191646769466,
+        0.0034575361925638995
+      ],
+      "settled_luma": [
+        81.98994736762275,
+        43.50766410783872
+      ],
+      "last_1200_gpu_ms": {
+        "rt.sharc": 0.13808216666666667,
+        "rt.sharc_resolve": 0.04456241666666667,
+        "rt.pass.final_compose": 1.2216985833333334
+      },
+      "persisted_setting_verified": true
+    },
+    "3": {
+      "rms_relative": [
+        0.030792897736113295,
+        0.024992279036230844,
+        0.02103178188495828,
+        0.015782442306900152,
+        0.011529497366446618,
+        0.0035675528179612546
+      ],
+      "settled_luma": [
+        81.98445887933897,
+        43.4952419750046
+      ],
+      "last_1200_gpu_ms": {
+        "rt.sharc": 0.21359091666666666,
+        "rt.sharc_resolve": 0.05176925,
+        "rt.pass.final_compose": 1.1869256666666668
+      },
+      "persisted_setting_verified": true
+    },
+    "decision": "Reject factor3 as a noise treatment: confirmed denser cache update increases GPU cost without improving six-turn convergence. These capped static timing tails are pass-cost observations, not minimum-FPS tests.",
+    "candidate_sha256": "620f680f25c8a41a6b3949d89c3dfbd78fb5774c46af9155a925036cfbf72f41",
+    "initial_invalid_attempt": "Java discarded the undeclared native setting. Initial data cannot establish density effect. Verified pair exposes the option in modules/ray_tracing.yaml and confirms saved5/3 plus changed GPU cost."
+  },
+  "opposite_view": {
+    "screen": {
+      "rms_relative": [
+        0.030792585003213448,
+        0.02440233455834688,
+        0.020714839295596317,
+        0.015510874431197016,
+        0.011199525423029943,
+        0.0036353325006237636
+      ],
+      "settled_luma": [
+        81.97651173510391,
+        43.527627452822045
+      ],
+      "last_1200_gpu_ms": {
+        "rt.sharc": 0.1359,
+        "rt.sharc_resolve": 0.044628916666666664,
+        "rt.pass.final_compose": 1.21390175
+      }
+    },
+    "opposite-quarter": {
+      "rms_relative": [
+        0.03109703253464656,
+        0.02515312937287093,
+        0.021024330582049965,
+        0.01587464771820217,
+        0.011628168012816553,
+        0.0034517841818932815
+      ],
+      "settled_luma": [
+        81.99342460600077,
+        43.731675197563796
+      ],
+      "last_1200_gpu_ms": {
+        "rt.sharc": 0.14378666666666667,
+        "rt.sharc_resolve": 0.0490065,
+        "rt.pass.final_compose": 1.2377500833333333
+      }
+    },
+    "decision": "Reject as a cave-noise treatment: no useful gain from spending one quarter of the fixed update budget on the opposite view. Diagnostic never installed; live shader source restored.",
+    "candidate_sha256": "f01d1561d496e8e6eee79c693b8c6876e4f9617ab010d2e9974cfdced1893ff2"
+  },
+  "allocation_audit": {
+    "jar_sha256": "26701ea6ebd634bcc3e779be5c4352915fc3c34e9966eae3af08847e423e6703",
+    "capacity_entries": 4194304,
+    "counter_method": "Atomic counters in unused lock-buffer words, displayed as binary cells through RR and tone mapping. Settled failure cells decoded without ambiguous intensities; this is not raw buffer readback.",
+    "displayed_failures_before_six_turns": 115,
+    "displayed_failures_after_six_turns": 115,
+    "attempt_counter_visibly_active": true,
+    "finding": "Allocation failure path exists and was exercised before the capture. The displayed failure total did not increase across this six-turn cave capture; no evidence here ties it to the reported rapid-turn spots.",
+    "source_issue": "HashMapInsert sets cacheIndex=0 on allocation failure; HashMapInsertEntry ignores its false result and returns that unrelated slot. The ordinary invalid-index guards do not catch slot0. A targeted correctness fix remains to be implemented/tested.",
+    "source_restored": true,
+    "diagnostic_installed": false
+  }
+}

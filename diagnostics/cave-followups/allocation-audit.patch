@@ -1,0 +1,60 @@
+--- a/extern/sharc/include/HashGridCommon.h
++++ b/extern/sharc/include/HashGridCommon.h
+@@ -7,6 +7,15 @@
+  * distribution of this software and related documentation without an express
+  * license agreement from NVIDIA CORPORATION is strictly prohibited.
+  */
++
++// Private GLSL audit: native allocation always provides and zeroes this lock
++// buffer. The 64-bit atomic path does not use it, so two words can count failed
++// and attempted insertions without changing cache lookup/insert behavior.
++#if SHARC_ENABLE_GLSL && HASH_GRID_ENABLE_64_BIT_ATOMICS
++layout(std430, set = 4, binding = 4) buffer SharcAllocationAudit {
++    uint sharcAllocationAudit[];
++};
++#endif
+ 
+ // Constants
+ #define HASH_GRID_POSITION_BIT_NUM          17
+@@ -195,6 +204,9 @@
+ 
+ bool HashMapInsert(in HashMapData hashMapData, const HashGridKey hashKey, out HashGridIndex cacheIndex)
+ {
++#if SHARC_ENABLE_GLSL && HASH_GRID_ENABLE_64_BIT_ATOMICS
++    atomicAdd(sharcAllocationAudit[1], 1u);
++#endif
+     const uint baseSlot = HashGridGetBaseSlot(hashKey, hashMapData.capacity);
+     HASH_GRID_LOOP_ATTR
+     for (uint bucketOffset = 0; bucketOffset < HASH_GRID_HASH_MAP_BUCKET_SIZE; ++bucketOffset)
+@@ -210,6 +222,9 @@
+         }
+     }
+ 
++#if SHARC_ENABLE_GLSL && HASH_GRID_ENABLE_64_BIT_ATOMICS
++    atomicAdd(sharcAllocationAudit[0], 1u);
++#endif
+     cacheIndex = 0;
+ 
+     return false;
+--- a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+@@ -1531,6 +1531,19 @@
+     }
+ #    endif
+ 
++#if SHARC_QUERY && USE_SHARC
++    // Two binary rows, least-significant bit first: failed allocations above,
++    // attempted allocations below. Colored leading tiles identify the rows.
++    // This is a diagnostic overlay only; do not score these frames for quality.
++    if (pixel.x < 33 * 12 && pixel.y < 2 * 12) {
++        uint tile = uint(pixel.x / 12);
++        uint row = uint(pixel.y / 12);
++        uint count = sharcAllocationAudit[row];
++        mainRay.radiance = tile == 0u ? (row == 0u ? vec3(8.0, 0.0, 0.0) : vec3(0.0, 8.0, 0.0)) :
++            vec3(((count >> (max(tile, 1u) - 1u)) & 1u) != 0u ? 4.0 : 0.0);
++    }
++#endif
++
+     if (isnan(mainRay.radiance.r) || isinf(mainRay.radiance.r)) { mainRay.radiance = vec3(0.0, 0.0, 0.0); }
+     if (isnan(mainRay.radiance.g) || isinf(mainRay.radiance.g)) { mainRay.radiance = vec3(0.0, 0.0, 0.0); }
+     if (isnan(mainRay.radiance.b) || isinf(mainRay.radiance.b)) { mainRay.radiance = vec3(0.0, 0.0, 0.0); }

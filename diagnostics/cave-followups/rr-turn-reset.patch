@@ -1,0 +1,54 @@
+--- a/src/core/render/modules/world/dlss/dlss_wrapper.cpp
++++ b/src/core/render/modules/world/dlss/dlss_wrapper.cpp
+@@ -420,6 +420,37 @@ NVSDK_NGX_Result DlssRR::denoise(std::shared_ptr<vk::CommandBuffer> cmdBuffer,
+     evalParams.pInWorldToViewMatrix = const_cast<float *>(glm::value_ptr(modelView));
+     evalParams.pInViewToClipMatrix = const_cast<float *>(glm::value_ptr(projection));
+ 
++    static const float turnResetDegrees = [] {
++        const char *value = std::getenv("MCVR_DLSS_TURN_RESET_DEGREES");
++        const float degrees = value ? std::strtof(value, nullptr) : 0.0f;
++        if (value) std::cerr << "[DLSS turn-reset] threshold_degrees=" << degrees << std::endl;
++        return std::isfinite(degrees) && degrees > 0.0f && degrees < 180.0f ? degrees : 0.0f;
++    }();
++    if (turnResetDegrees > 0.0f) {
++        // The third row of a world-to-view rotation is the world-space view axis.
++        const glm::vec3 axis{modelView[0][2], modelView[1][2], modelView[2][2]};
++        const float axisLength = glm::length(axis);
++        if (std::isfinite(axisLength) && axisLength > 1e-5f) {
++            const glm::vec3 forward = axis / axisLength;
++            const float angle = m_debugPreviousForwardValid ?
++                glm::degrees(std::acos(glm::clamp(glm::dot(forward, m_debugPreviousForward), -1.0f, 1.0f))) : 0.0f;
++            const bool turning = angle >= turnResetDegrees;
++            // Include the first frame after the rapid rotation ends.
++            reset = reset || turning || m_debugTurning;
++            if (turning) {
++                if (!m_debugTurning) {
++                    m_debugTurnFrames = 0;
++                    std::cerr << "[DLSS turn-reset] begin angle=" << angle << std::endl;
++                }
++                ++m_debugTurnFrames;
++            } else if (m_debugTurning) {
++                std::cerr << "[DLSS turn-reset] end reset_frames=" << m_debugTurnFrames + 1 << std::endl;
++            }
++            m_debugTurning = turning;
++            m_debugPreviousForward = forward;
++            m_debugPreviousForwardValid = true;
++        }
++    }
+     evalParams.InReset = reset;
+ 
+     NGX_RETURN_ON_FAIL(
+--- a/src/core/render/modules/world/dlss/dlss_wrapper.hpp
++++ b/src/core/render/modules/world/dlss/dlss_wrapper.hpp
+@@ -204,4 +204,9 @@ class DlssRR : public SharedObject<DlssRR> {
+     VkExtent2D m_inputSize;
+     VkExtent2D m_outputSize;
+     std::array<NVSDK_NGX_Resource_VK, RESOURCE_NUM> m_resources;
+-};
+\ No newline at end of file
++    // Private diagnostic: isolate RR history during a rapid camera turn.
++    glm::vec3 m_debugPreviousForward{0.0f};
++    bool m_debugPreviousForwardValid = false;
++    bool m_debugTurning = false;
++    unsigned m_debugTurnFrames = 0;
++};
