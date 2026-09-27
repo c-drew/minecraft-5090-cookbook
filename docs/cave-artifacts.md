@@ -335,7 +335,7 @@ update variants now consistently use indirect emission strength. Normal
 camera-visible emission and the separate vertex-emission term are unchanged.
 This follows the update/query separation in NVIDIA's
 [SHaRC integration guide](https://github.com/NVIDIA-RTX/SHARC/blob/main/docs/Integration.md).
-Cache eligibility and cone gating are unchanged and remain separate audit leads.
+Cache eligibility and cone gating are unchanged in the selected build.
 
 The installed profile retains 48 candidates, history cap 8, strength 32, four
 bounces and SHaRC. Two launches with six turns each give:
@@ -387,6 +387,14 @@ throughput to about 218 FPS. Both cache-disabled profiles were rejected as
 general replacements. The combined correction retains the brighter interiors.
 Individual query-only and emission-only jars were built but not independently
 playtested, so their visual effects cannot be separated from this experiment.
+
+A separate eligibility diagnostic used preceding-surface roughness and the
+incoming lobe, admitted the first secondary hit after rough/diffuse scattering,
+and squared GGX alpha in the glossy cone. It compiled in all 92 affected variants
+but worsened six-turn relative RMS to 0.06609 at 50 ms and 0.04069 at 300 ms.
+Settled luma rose to 86.12/44.01. It was rejected, never installed, and the source
+was restored. Those three changes were tested together; the result does not
+attribute the regression to an individual component.
 
 See [cache measurements](../measurements/cave-cache-energy-2026-09-27.json) for
 full-precision results, all twelve turn events, and the rejected alternatives.

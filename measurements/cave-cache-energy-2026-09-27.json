@@ -1220,5 +1220,40 @@
     ],
     "material_measurement": "PIL RGB -> L mean in crop [100,100,2400,1000], 0..255; diagnostic brightness comparison, not a quality score."
   },
-  "component_limit": "Combined correction tested; query-only and emission-only jars were not independently playtested."
+  "component_limit": "Combined correction tested; query-only and emission-only jars were not independently playtested.",
+  "rejected_eligibility_diagnostic": {
+    "status": "Rejected, not installed; source restored to installed c10e03af cache-energy correction.",
+    "jar_sha256": "080a1d4d8179d88c63ba4f13ce755b4d973709b63d457fceb06c740a7af2635f",
+    "base_jar_sha256": "c10e03af5f90c563621d32346cb804db0415c6e39e07a432140f82b56427f600",
+    "shader_variants_compiled": 92,
+    "turns": 6,
+    "changes": "Gate cache queries using preceding roughness/incoming lobe, admit first secondary hits after rough/diffuse primaries, and use alpha squared in the glossy cone. Tested together; no component attribution.",
+    "mean_relative_rms_by_delay": {
+      "0.05": 0.06608503609968938,
+      "0.15": 0.05124098786668859,
+      "0.3": 0.04069144491884514,
+      "0.6": 0.027258091694010868,
+      "1.2": 0.0155393639635843,
+      "2.3": 0.004463665318996781
+    },
+    "settled_luma_down_up": [
+      86.12136540970543,
+      44.01414496576552
+    ],
+    "materials": [
+      {
+        "view": "materials-front",
+        "mean_crop_luma": 108.98585265700483
+      },
+      {
+        "view": "materials-oblique",
+        "mean_crop_luma": 112.7955652173913
+      },
+      {
+        "view": "materials-water",
+        "mean_crop_luma": 99.41997487922706
+      }
+    ],
+    "scope": "Same convergence proxy and scene as cache-energy; single launch, six turns. No claim of source-correctness or material-ground-truth from this diagnostic."
+  }
 }
