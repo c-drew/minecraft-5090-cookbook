@@ -1,0 +1,100 @@
+--- a/src/core/render/render_framework.cpp
++++ b/src/core/render/render_framework.cpp
+@@ -29,6 +29,7 @@
+ FrameworkContext::FrameworkContext(std::shared_ptr<Framework> framework, uint32_t frameIndex)
+     : framework(framework),
+       frameIndex(frameIndex),
++      swapchainImageIndex(frameIndex),
+       instance(framework->instance_),
+       window(framework->window_),
+       physicalDevice(framework->physicalDevice_),
+@@ -215,7 +216,15 @@
+         exit(EXIT_FAILURE);
+     }
+ 
+-    std::shared_ptr<vk::Fence> fence = contexts_[imageIndex]->commandFinishedFence;
++    // Diagnostic: resource reuse follows a bounded two-frame ring, independent
++    // of which display image WSI returns. An immediate repeat image must not
++    // force the CPU to wait on the render resources it just submitted.
++    static const bool independentSlots = [] {
++        const char *value = std::getenv("MCVR_INDEPENDENT_FRAME_SLOTS");
++        return value && value[0] == '1' && value[1] == '\0';
++    }();
++    const uint32_t contextIndex = independentSlots ? nextRenderContextIndex_ : imageIndex;
++    std::shared_ptr<vk::Fence> fence = contexts_[contextIndex]->commandFinishedFence;
+     {
+         RAD_PROFILE_SCOPE("framework.fence_wait");
+         result = vkWaitForFences(device_->vkDevice(), 1, &fence->vkFence(), true, UINT64_MAX);
+@@ -225,11 +234,17 @@
+         waitDeviceIdle();
+         exit(EXIT_FAILURE);
+     }
+-    currentContextIndex_ = imageIndex;
+-    currentContext_ = contexts_[imageIndex];
+-    indexHistory_.push(imageIndex);
++    currentContextIndex_ = contextIndex;
++    currentContext_ = contexts_[contextIndex];
++    nextRenderContextIndex_ = (contextIndex + 1) % std::min(uint32_t(contexts_.size()), 2u);
++    currentContext_->swapchainImageIndex = imageIndex;
++    currentContext_->swapchainImage = swapchain_->swapchainImages()[imageIndex];
++    // Present-wait semaphores remain indexed by acquired display image. The
++    // acquire wait guarantees the previous presentation finished using it.
++    currentContext_->commandProcessedSemaphore = commandProcessedSemaphores_[imageIndex];
++    indexHistory_.push(contextIndex);
+     if (indexHistory_.size() > swapchain_->imageCount()) indexHistory_.pop();
+-    frameResourceRetainer_->beginFrame(imageIndex);
++    frameResourceRetainer_->beginFrame(contextIndex);
+ 
+     if (currentContext_->imageAcquiredSemaphore != VK_NULL_HANDLE) {
+         recycleSemaphore(currentContext_->imageAcquiredSemaphore);
+@@ -241,12 +256,12 @@
+         RAD_PROFILE_SCOPE("framework.command_buffers_begin");
+         currentContext_->uploadCommandBuffer->begin();
+         mcvr_gpu_frame::begin(instance_->vkInstance(), physicalDevice_->vkPhysicalDevice(), device_->vkDevice(),
+-                              physicalDevice_->mainQueueIndex(), imageIndex,
++                              physicalDevice_->mainQueueIndex(), contextIndex,
+                               currentContext_->uploadCommandBuffer->vkCommandBuffer());
+         currentContext_->worldCommandBuffer->begin();
+         mcvr_gpu_timing::beginFrame(device_->vkDevice(), physicalDevice_->properties().limits.timestampPeriod,
+-                                    imageIndex, currentContext_->worldCommandBuffer->vkCommandBuffer());
+-        mcvr::drs::beginFrame(device_->vkDevice(), physicalDevice_->properties().limits.timestampPeriod, imageIndex,
++                                    contextIndex, currentContext_->worldCommandBuffer->vkCommandBuffer());
++        mcvr::drs::beginFrame(device_->vkDevice(), physicalDevice_->properties().limits.timestampPeriod, contextIndex,
+                               currentContext_->worldCommandBuffer->vkCommandBuffer(), effectiveFrameRateLimit());
+         currentContext_->overlayCommandBuffer->begin();
+         currentContext_->fuseCommandBuffer->begin();
+@@ -366,7 +381,7 @@
+ 
+     presentInfo.swapchainCount = 1;
+     presentInfo.pSwapchains = &swapchain_->vkSwapchain();
+-    presentInfo.pImageIndices = &currentContext_->frameIndex;
++    presentInfo.pImageIndices = &currentContext_->swapchainImageIndex;
+ 
+     VkResult result = vkQueuePresentKHR(device_->mainVkQueue(), &presentInfo);
+ 
+@@ -446,6 +461,7 @@
+         }
+ 
+         currentContextIndex_ = 0;
++        nextRenderContextIndex_ = 0;
+         currentContext_ = nullptr;
+         contexts_.clear();
+ 
+--- a/src/core/render/render_framework.hpp
++++ b/src/core/render/render_framework.hpp
+@@ -34,6 +34,7 @@
+     std::weak_ptr<Framework> framework;
+ 
+     uint32_t frameIndex;
++    uint32_t swapchainImageIndex;
+ 
+     std::shared_ptr<vk::Instance> instance;
+     std::shared_ptr<vk::Window> window;
+@@ -132,6 +133,7 @@
+ 
+     std::shared_ptr<FrameworkContext> currentContext_ = nullptr;
+     uint32_t currentContextIndex_ = 0;
++    uint32_t nextRenderContextIndex_ = 0;
+     std::queue<uint32_t> indexHistory_;
+ 
+     std::queue<std::shared_ptr<vk::Semaphore>> recycledImageAcquiredSemaphores_;

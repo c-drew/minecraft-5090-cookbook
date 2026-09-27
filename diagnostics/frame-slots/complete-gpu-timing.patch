@@ -1,0 +1,258 @@
+--- a/src/core/render/render_framework.cpp
++++ b/src/core/render/render_framework.cpp
+@@ -1,4 +1,5 @@
+ #include "core/util/gpu_timing.hpp"
++#include "core/util/gpu_frame_log.hpp"
+ #include "core/render/dynamic_resolution.hpp"
+ #include "core/render/render_framework.hpp"
+ 
+@@ -239,6 +240,9 @@
+     {
+         RAD_PROFILE_SCOPE("framework.command_buffers_begin");
+         currentContext_->uploadCommandBuffer->begin();
++        mcvr_gpu_frame::begin(instance_->vkInstance(), physicalDevice_->vkPhysicalDevice(), device_->vkDevice(),
++                              physicalDevice_->mainQueueIndex(), imageIndex,
++                              currentContext_->uploadCommandBuffer->vkCommandBuffer());
+         currentContext_->worldCommandBuffer->begin();
+         mcvr_gpu_timing::beginFrame(device_->vkDevice(), physicalDevice_->properties().limits.timestampPeriod,
+                                     imageIndex, currentContext_->worldCommandBuffer->vkCommandBuffer());
+@@ -313,6 +317,10 @@
+ 
+     {
+         RAD_PROFILE_SCOPE("framework.command_buffers_end");
++        mcvr_gpu_frame::endSection(currentContext_->uploadCommandBuffer->vkCommandBuffer(), 1);
++        mcvr_gpu_frame::endSection(currentContext_->worldCommandBuffer->vkCommandBuffer(), 2);
++        mcvr_gpu_frame::endSection(currentContext_->overlayCommandBuffer->vkCommandBuffer(), 3);
++        mcvr_gpu_frame::endSection(currentContext_->fuseCommandBuffer->vkCommandBuffer(), 4);
+         currentContext_->uploadCommandBuffer->end();
+         currentContext_->worldCommandBuffer->end();
+         currentContext_->overlayCommandBuffer->end();
+@@ -343,6 +351,7 @@
+     {
+         RAD_PROFILE_SCOPE("framework.queue_submit");
+         vkResetFences(device_->vkDevice(), 1, &fence->vkFence());
++        mcvr_gpu_frame::submitted();
+         vkQueueSubmit(device_->mainVkQueue(), 1, &vkSubmitInfo, fence->vkFence());
+     }
+ }
+@@ -495,6 +504,10 @@
+ }
+ 
+ void Framework::close() {
++    if (running_ && mcvr_gpu_frame::enabled()) {
++        waitRenderQueueIdle();
++        mcvr_gpu_frame::shutdown(device_->vkDevice());
++    }
+     if (running_) { pipeline_->close(); }
+     running_ = false;
+ }
+--- a/src/core/vulkan/device.cpp
++++ b/src/core/vulkan/device.cpp
+@@ -98,6 +98,11 @@
+     std::unordered_set<std::string> supportedExtensions;
+     supportedExtensions.reserve(deviceExtensions.size());
+     for (const auto &ext : deviceExtensions) { supportedExtensions.insert(ext.extensionName); }
++
++    if (std::getenv("MCVR_GPU_FRAME_LOG") &&
++        supportedExtensions.count(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME)) {
++        enabledExtensions.push_back(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
++    }
+ 
+     if (supportedExtensions.find(VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME) != supportedExtensions.end()) {
+         enabledExtensions.push_back(VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME);
+--- /dev/null
++++ b/src/core/util/gpu_frame_log.hpp
+@@ -0,0 +1,193 @@
++#pragma once
++// Diagnostic GPU submission envelope, enabled only by MCVR_GPU_FRAME_LOG.
++// Five fixed query indices follow GPU submission order, regardless of the
++// order in which upload/world/UI/fuse command buffers are recorded on the CPU.
++// Results are collected only after the slot fence has completed. Intervals
++// include scheduling/preemption within their envelope, not just active work.
++#include "core/all_extern.hpp"
++#include "core/util/cpu_frame_log.hpp"
++#include <array>
++#include <chrono>
++#include <cstdio>
++#include <cstdlib>
++#include <cstdint>
++#include <limits>
++#include <vector>
++#ifdef __linux__
++#include <time.h>
++#endif
++
++namespace mcvr_gpu_frame {
++constexpr uint32_t kCount = 5;
++struct Slot {
++    VkQueryPool pool = VK_NULL_HANDLE;
++    bool pending = false;
++    uint64_t frame = 0;
++    double cpuUnixMs = 0.0;
++    uint64_t submitNs = 0, calibrationDevice = 0, calibrationHost = 0, deviation = 0;
++};
++struct State {
++    FILE *out = nullptr;
++    VkDevice device = VK_NULL_HANDLE;
++    double periodNs = 0.0;
++    uint32_t validBits = 0;
++    bool configured = false;
++    uint64_t calibrationDevice = 0, calibrationHost = 0, deviation = 0;
++    PFN_vkGetCalibratedTimestampsEXT calibrate = nullptr;
++    VkTimeDomainEXT domain = VK_TIME_DOMAIN_DEVICE_EXT;
++    std::vector<Slot> slots;
++    Slot *current = nullptr;
++    State() {
++        if (const char *path = std::getenv("MCVR_GPU_FRAME_LOG")) out = std::fopen(path, "w");
++        if (out) std::fprintf(out, "frame,cpu_unix_ms,collector_frame,timestamp_bits,timestamp_period_ns,"
++                                  "gpu_begin_tick,gpu_end_tick,total_ms,upload_ms,world_ms,overlay_ms,fuse_ms,"
++                                  "submit_host_ns,gpu_begin_host_ns,gpu_end_host_ns,calibration_deviation_ns\n");
++    }
++    ~State() { if (out) std::fclose(out); }
++};
++inline State &state() { static State s; return s; }
++inline bool enabled() { return state().out != nullptr; }
++
++inline uint64_t hostNs(VkTimeDomainEXT domain) {
++#ifdef __linux__
++    timespec t{};
++    clockid_t clock = domain == VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT ? CLOCK_MONOTONIC_RAW : CLOCK_MONOTONIC;
++    if (clock_gettime(clock, &t) == 0) return uint64_t(t.tv_sec) * 1000000000ULL + uint64_t(t.tv_nsec);
++#endif
++    return 0;
++}
++
++inline void refreshCalibration() {
++    State &s = state();
++    if (!s.calibrate) return;
++    uint64_t now = hostNs(s.domain);
++    if (s.calibrationHost && now - s.calibrationHost < 1000000000ULL) return;
++    VkCalibratedTimestampInfoEXT info[2]{};
++    for (auto &entry : info) entry.sType = VK_STRUCTURE_TYPE_CALIBRATED_TIMESTAMP_INFO_EXT;
++    info[0].timeDomain = VK_TIME_DOMAIN_DEVICE_EXT;
++    info[1].timeDomain = s.domain;
++    uint64_t values[2]{}, deviation{};
++    if (s.calibrate(s.device, 2, info, values, &deviation) == VK_SUCCESS) {
++        s.calibrationDevice = values[0];
++        s.calibrationHost = values[1];
++        s.deviation = deviation;
++    } else {
++        s.calibrationHost = 0;
++    }
++}
++
++inline void configure(VkInstance instance, VkPhysicalDevice physical, VkDevice device, uint32_t family) {
++    State &s = state();
++    if (s.configured) return;
++    s.configured = true;
++    s.device = device;
++    VkPhysicalDeviceProperties properties{};
++    vkGetPhysicalDeviceProperties(physical, &properties);
++    s.periodNs = properties.limits.timestampPeriod;
++    uint32_t count = 0;
++    vkGetPhysicalDeviceQueueFamilyProperties(physical, &count, nullptr);
++    std::vector<VkQueueFamilyProperties> families(count);
++    vkGetPhysicalDeviceQueueFamilyProperties(physical, &count, families.data());
++    if (family < count) s.validBits = families[family].timestampValidBits;
++#ifdef __linux__
++    // The diagnostic's device setup requests this extension only when available.
++    auto domains = reinterpret_cast<PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsEXT>(
++        vkGetInstanceProcAddr(instance, "vkGetPhysicalDeviceCalibrateableTimeDomainsEXT"));
++    auto calibrate = reinterpret_cast<PFN_vkGetCalibratedTimestampsEXT>(
++        vkGetDeviceProcAddr(device, "vkGetCalibratedTimestampsEXT"));
++    if (domains && calibrate && s.validBits == 64) {
++        uint32_t n = 0;
++        if (domains(physical, &n, nullptr) == VK_SUCCESS && n) {
++            std::vector<VkTimeDomainEXT> available(n);
++            if (domains(physical, &n, available.data()) == VK_SUCCESS) {
++                for (auto d : available) if (d == VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT) {
++                    s.domain = d;
++                    s.calibrate = calibrate;
++                }
++            }
++        }
++    }
++#endif
++    refreshCalibration();
++}
++
++inline void collect(Slot &slot) {
++    State &s = state();
++    if (!slot.pending) return;
++    std::array<uint64_t, kCount> ticks{};
++    VkResult result = vkGetQueryPoolResults(s.device, slot.pool, 0, kCount, sizeof(ticks), ticks.data(),
++                                          sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
++    if (result != VK_SUCCESS) {
++        std::fprintf(stderr, "[GPU frame log] completed slot query unavailable: %d\n", int(result));
++        slot.pending = false;
++        return;
++    }
++    uint64_t mask = s.validBits == 64 ? ~uint64_t(0) : ((uint64_t(1) << s.validBits) - 1);
++    auto ms = [&](uint32_t a, uint32_t b) { return double((ticks[b] - ticks[a]) & mask) * s.periodNs * 1e-6; };
++    // Calibration was captured before submission, so the following device
++    // timestamps are nearby and later. Do not extrapolate unsupported clocks.
++    auto host = [&](uint64_t tick) -> double {
++        if (!slot.calibrationHost || s.validBits != 64) return -1.0;
++        return double(slot.calibrationHost) + double(int64_t(tick - slot.calibrationDevice)) * s.periodNs;
++    };
++    std::fprintf(s.out, "%llu,%.3f,%llu,%u,%.6f,%llu,%llu,%.6f,%.6f,%.6f,%.6f,%.6f,%llu,%.0f,%.0f,%llu\n",
++        (unsigned long long)slot.frame, slot.cpuUnixMs, mcvr_cpu_frame::state().frame,
++        s.validBits, s.periodNs, (unsigned long long)ticks[0], (unsigned long long)ticks[4],
++        ms(0, 4), ms(0, 1), ms(1, 2), ms(2, 3), ms(3, 4), (unsigned long long)slot.submitNs,
++        host(ticks[0]), host(ticks[4]), (unsigned long long)slot.deviation);
++    slot.pending = false;
++}
++
++inline void begin(VkInstance instance, VkPhysicalDevice physical, VkDevice device, uint32_t family,
++                  uint32_t index, VkCommandBuffer upload) {
++    if (!enabled()) return;
++    State &s = state();
++    s.current = nullptr;
++    configure(instance, physical, device, family);
++    if (!s.validBits) return;
++    if (s.slots.size() <= index) s.slots.resize(index + 1);
++    Slot &slot = s.slots[index];
++    collect(slot); // The framework already waited for this slot's fence.
++    if (!slot.pool) {
++        VkQueryPoolCreateInfo info{};
++        info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
++        info.queryType = VK_QUERY_TYPE_TIMESTAMP;
++        info.queryCount = kCount;
++        if (vkCreateQueryPool(device, &info, nullptr, &slot.pool) != VK_SUCCESS) return;
++    }
++    refreshCalibration();
++    slot.frame = mcvr_cpu_frame::state().started ? mcvr_cpu_frame::state().frame : std::numeric_limits<uint64_t>::max();
++    slot.cpuUnixMs = mcvr_cpu_frame::state().startUnixMs;
++    s.current = &slot;
++    vkCmdResetQueryPool(upload, slot.pool, 0, kCount);
++    vkCmdWriteTimestamp(upload, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, slot.pool, 0);
++}
++
++inline void endSection(VkCommandBuffer cmd, uint32_t index) {
++    if (!enabled() || !state().current || index == 0 || index >= kCount) return;
++    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, state().current->pool, index);
++}
++
++inline void submitted() {
++    if (!enabled() || !state().current) return;
++    State &s = state();
++    Slot &slot = *s.current;
++    slot.submitNs = hostNs(s.domain);
++    slot.calibrationDevice = s.calibrationDevice;
++    slot.calibrationHost = s.calibrationHost;
++    slot.deviation = s.deviation;
++    slot.pending = true;
++}
++
++inline void shutdown(VkDevice device) {
++    if (!enabled()) return;
++    // Called after the render queue is idle and before device destruction.
++    for (Slot &slot : state().slots) {
++        collect(slot);
++        if (slot.pool) vkDestroyQueryPool(device, slot.pool, nullptr);
++    }
++    state().slots.clear();
++    state().current = nullptr;
++    std::fflush(state().out);
++}
++} // namespace mcvr_gpu_frame

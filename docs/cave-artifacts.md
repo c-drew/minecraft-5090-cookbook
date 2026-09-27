@@ -3,9 +3,10 @@
 Status, September 27, 2026: a real reservoir-count defect is corrected and the
 observed spots are substantially reduced. Fine transient noise remains. A
 sampling optimization preserves comparable stability with 48 candidates. A
-subsequent cache-energy correction provides a small additional improvement. Valid
-outdoor traversal tests exceed 144 FPS at the 1% low, but rare longer frames and
-rapid-turn spikes remain. This does not establish a strict 144 FPS minimum or
+subsequent cache-energy correction provides a small additional improvement.
+The later [frame scheduling fix](frame-slots.md) reduces rapid-turn engine
+stalls while preserving these shader changes. Valid outdoor traversal tests
+exceed 144 FPS at the 1% low, but rare longer frames remain. This does not establish a strict 144 FPS minimum or
 eliminate all visible defects. An earlier outdoor comparison was invalid; its
 correction is retained below.
 
@@ -97,7 +98,7 @@ above. The fast-turn cave capture and fixed-camera lighting checks are unaffecte
 
 ## Reproducing the experimental profile
 
-Build with the optional patches after the twelve normal MCVR patches:
+Build with the optional patches after the thirteen normal MCVR patches:
 
 ```sh
 MCVR_CAVE_COUNTS=1 scripts/build.sh
@@ -399,5 +400,7 @@ attribute the regression to an individual component.
 See [cache measurements](../measurements/cave-cache-energy-2026-09-27.json) for
 full-precision results, all twelve turn events, and the rejected alternatives.
 The cache correction changes only the jar; reverting just this step restores
-the preceding optimized jar while keeping its matching settings. Perform this
-rollback before reverting the earlier sampling/count steps.
+the preceding optimized jar while keeping its matching settings. The later
+[frame scheduling change](frame-slots.md) has its own jar-only rollback, which
+must run first if installed. Revert the cache step before the earlier
+sampling/count steps.

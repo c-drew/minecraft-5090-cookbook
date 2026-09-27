@@ -18,6 +18,11 @@ block-light shadow. Sun shadows, reflections, and shadows of other entities rema
 built and exercised in the private cave test instance. Neither is a complete cure for the
 transient spots after rapid turns.
 
+`mcvr/0013` separates the render-resource ring from swapchain image selection.
+Present-wait semaphores remain per acquired image. The tested release improves
+rapid-turn engine pacing while leaving shaders unchanged; see
+[the measurements and remaining limits](../docs/frame-slots.md).
+
 `experimental/cave-counts/` is a separate opt-in series applied after the normal
 MCVR patches with `MCVR_CAVE_COUNTS=1 scripts/build.sh`. It corrects failed-sample
 count retention and requires a matching lighting calibration. See

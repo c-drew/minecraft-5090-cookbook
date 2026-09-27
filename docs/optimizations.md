@@ -100,6 +100,17 @@ magnifies texels and turns leaf cut-outs into holes several blocks wide. The LoD
 voxel size into the (otherwise unused for blocks) glint UV, and the hit shaders repeat the texture
 once per block and scale the ray-cone derivatives to match.
 
+## mcvr/0013: independent frame-resource slots
+
+Acquiring the most recently submitted swapchain image also selected its render
+resources, forcing CPU preparation to wait behind that submission. Command
+buffers, fences and retained resources now follow a bounded two-slot ring;
+the displayed image and presentation-wait semaphore follow the acquired image.
+The exact release raises cave engine 1% lows from roughly 98–107 to 152–156 FPS
+in the recorded rapid-turn protocol. This leaves shaders unchanged and does not
+establish a universal frame-rate floor or physical display delivery. See
+[the diagnosis, release validation and remaining limits](frame-slots.md).
+
 ## radiance/0001: render thread, Java side
 
 - **Rebuild queue.** A `ConcurrentHashMap` was iterated and cleared every frame. Both walk the

@@ -15,6 +15,9 @@ are included below; they do not eliminate the light-sampling artifacts. A minimu
 no visible defects remains a target, not a verified result across gameplay. See the
 [cave investigation and optional sampling/cache corrections](docs/cave-artifacts.md) for measurements,
 reproduction steps, and a correction to an invalid outdoor-walking comparison.
+The subsequent [frame scheduling fix](docs/frame-slots.md) substantially improves
+engine timing during rapid turns without changing shader quality. Rare long
+frames and physical display validation remain unresolved.
 
 ## Results
 
@@ -153,6 +156,7 @@ Details and measurements are in [docs/optimizations.md](docs/optimizations.md).
 | mcvr/0010 | Per-block texture tiling for LoD terrain |
 | mcvr/0011 | Give DLSS RR the same camera view as primary rays, including bobbing and hurt effects |
 | mcvr/0012 | Optional player block-light shadow switch; default on, can remove the camera player's cave silhouette |
+| mcvr/0013 | Separate two render-resource slots from acquired display images, avoiding needless fence serialization |
 | radiance/0001 | Render thread: cheaper chunk rebuild queue, indexed block entities, smaller per-object buffers |
 | radiance/0002 | `LodBridge`: native chunk slots for LoD meshes after the vanilla grid |
 | radiance/0003 | No fluid walls facing unloaded chunks |
