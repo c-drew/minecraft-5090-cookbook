@@ -69,7 +69,9 @@ different random frames and cannot be treated as a paired variance estimate.
 A [cache-hit material diagnostic](../diagnostics/cache-hit-materials/README.md)
 subsequently traces most extreme samples in the turned view to later hits on
 two actual torch blocks. A guarded earlier-query probe adds no established
-useful improvement and remains outside the selected build.
+useful improvement and remains outside the selected build. A [stationary variance and emitter-source follow-up](../diagnostics/emitter-source/README.md)
+separates the two cave orientations and identifies unmatched player-model emission
+in the darker return view.
 
 The three material views retain glass, water, metal reflections and parallax
 relief. Crop mean changes are −0.411 / −0.160 / −0.059 gray levels. Animated
