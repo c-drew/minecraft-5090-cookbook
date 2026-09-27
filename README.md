@@ -1,7 +1,7 @@
 # The 5090 Minecraft Cookbook
 
-State of the art, opinionated, measured: Minecraft on a single RTX 5090 with hardware path tracing,
-DLSS Ray Reconstruction and distant terrain, at 1440p and a locked 144 Hz.
+Minecraft on a single RTX 5090 with hardware path tracing, DLSS Ray Reconstruction and distant
+terrain, targeting 1440p at 144 Hz.
 
 This repo is the recipe (mods, settings, system config) plus a set of engine patches for
 [Radiance](https://github.com/Minecraft-Radiance/Radiance), the Vulkan path-tracing renderer for
@@ -9,10 +9,16 @@ Minecraft. Every number below was measured on the hardware listed.
 
 It is a personal project. It is not affiliated with Radiance, Voxy, Mojang, Microsoft or NVIDIA.
 
+**September 27 cave follow-up:** rapid turns in torchlit caves reveal transient spotted artifacts
+that the original standing and movement benchmarks did not catch. Camera and shadow improvements
+are included below; they do not eliminate the light-sampling artifacts. A minimum of 144 FPS with
+no visible defects remains a target, not a verified result across gameplay.
+
 ## Results
 
-1440p output, uncapped, 30 s runs, render distance 16, distant terrain on. The frame rates are
-headroom: in play, VSync holds the monitor's 144.
+Historical performance profile: 1440p output, uncapped, 30 s runs, render distance 16, distant
+terrain on, 16 ReSTIR candidates, DLSS runtime 310.5.3. These measurements predate the cave
+artifact investigation. They measure throughput headroom, not a guaranteed frame-rate floor.
 
 | Scene | Avg fps | 1% low fps |
 |---|---|---|
@@ -106,10 +112,10 @@ system notes assume Linux.
 ### Render scale
 
 `MCVR_RENDER_SCALE` in `fork.properties` sets the ray-traced resolution per axis, relative to DLSS
-Quality's (1707x960 at 1440p). The cookbook uses **0.78125 = 1333x750**, which is between DLSS
+Quality's (1708x960 at 1440p). The cookbook uses **0.78125 = 1334x750**, which is between DLSS
 Balanced and Performance. Side by side with Quality, the difference is hard to spot (RMSE 1.5%
-between screenshots, distant foliage slightly softer), and it is what keeps every scene above
-141 fps. Use 1.0 for plain Quality if you have headroom to spare.
+between screenshots, distant foliage slightly softer). That static comparison does not measure
+fast-turn stability or prove a minimum FPS. Use 1.0 for plain Quality if you have headroom to spare.
 
 ### Frame pacing: VSync on, not a frame cap
 
@@ -143,6 +149,8 @@ Details and measurements are in [docs/optimizations.md](docs/optimizations.md).
 | mcvr/0008 | Cheaper GPU passes: SHaRC table 4M entries, one-layer surface-cache clears, early-out in continuation passes |
 | mcvr/0009 | Optional Vulkan global queue priority; ray query / SER capability plumbing |
 | mcvr/0010 | Per-block texture tiling for LoD terrain |
+| mcvr/0011 | Give DLSS RR the same camera view as primary rays, including bobbing and hurt effects |
+| mcvr/0012 | Optional player block-light shadow switch; default on, can remove the camera player's cave silhouette |
 | radiance/0001 | Render thread: cheaper chunk rebuild queue, indexed block entities, smaller per-object buffers |
 | radiance/0002 | `LodBridge`: native chunk slots for LoD meshes after the vanilla grid |
 | radiance/0003 | No fluid walls facing unloaded chunks |

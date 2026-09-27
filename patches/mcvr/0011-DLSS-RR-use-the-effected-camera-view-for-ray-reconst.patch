@@ -1,0 +1,31 @@
+From 8953f69f571e97289c16384d1b6f62d3f9d3d0fe Mon Sep 17 00:00:00 2001
+From: c-drew <101952850+c-drew@users.noreply.github.com>
+Date: Sun, 27 Sep 2026 04:16:53 -0400
+Subject: [PATCH 11/12] DLSS RR: use the effected camera view for ray
+ reconstruction
+
+Match the view used by primary rays, linear depth and motion vectors. The plain camera matrix omitted bobbing and hurt effects.
+---
+ src/core/render/modules/world/dlss/dlss_module.cpp | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/core/render/modules/world/dlss/dlss_module.cpp b/src/core/render/modules/world/dlss/dlss_module.cpp
+index 8369b14..894ed92 100644
+--- a/src/core/render/modules/world/dlss/dlss_module.cpp
++++ b/src/core/render/modules/world/dlss/dlss_module.cpp
+@@ -627,8 +627,11 @@ void DLSSModuleContext::render() {
+         auto worldUBO = static_cast<vk::Data::WorldUBO *>(worldUBOBuffer->mappedPtr());
+         if (worldUBO != nullptr) {
+             glm::vec2 jitter = worldUBO->cameraJitter;
++            // Match the camera used by primary rays, linear depth and motion vectors.
++            // The plain view matrix omits bobbing/hurt effects, so RR's reconstructed
++            // specular motion would otherwise use a different camera while moving.
+             module->dlss_->denoise(worldCommandBuffer, glm::uvec2{renderWidth, renderHeight}, jitter,
+-                                   worldUBO->cameraViewMat, worldUBO->cameraProjMat);
++                                   worldUBO->cameraEffectedViewMat, worldUBO->cameraProjMat);
+         }
+     }
+ 
+-- 
+2.55.0
+

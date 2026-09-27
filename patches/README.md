@@ -12,6 +12,12 @@ Two series for `git am`, applied by `scripts/build.sh`:
 [../docs/optimizations.md](../docs/optimizations.md). All patches are GPL-3.0, like the code they
 modify.
 
+`mcvr/0011` fixes the view matrix passed to DLSS Ray Reconstruction. `0012` adds
+`player_block_light_shadows` (default true); setting it false omits only the camera player's
+block-light shadow. Sun shadows, reflections, and shadows of other entities remain. Both were
+built and exercised in the private cave test instance. Neither is a complete cure for the
+transient spots after rapid turns.
+
 By hand:
 
 ```sh
