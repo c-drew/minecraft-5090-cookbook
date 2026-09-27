@@ -1,0 +1,20 @@
+--- a/src/core/render/modules/world/dlss/dlss_wrapper.cpp
++++ b/src/core/render/modules/world/dlss/dlss_wrapper.cpp
+@@ -307,6 +307,7 @@
+ 
+     NVSDK_NGX_DLSSD_Create_Params dlssdParams{};
+ 
++    std::cerr << "[DLSS] diagnostic frame-duration hint: 1000/144 ms" << std::endl;
+     dlssdParams.InDenoiseMode = NVSDK_NGX_DLSS_Denoise_Mode_DLUnified;
+     // We expose only packed normal/roughness here because of providing float16 normals
+     dlssdParams.InRoughnessMode = NVSDK_NGX_DLSS_Roughness_Mode_Packed; // we pack roughness into the normal's w channel
+@@ -420,6 +421,9 @@
+     evalParams.pInWorldToViewMatrix = const_cast<float *>(glm::value_ptr(modelView));
+     evalParams.pInViewToClipMatrix = const_cast<float *>(glm::value_ptr(projection));
+ 
++    // Diagnostic only: this build is evaluated at a fixed 144 FPS cap.
++    // The selected production renderer leaves this optional hint at zero.
++    evalParams.InFrameTimeDeltaInMsec = 1000.0f / 144.0f;
+     evalParams.InReset = reset;
+ 
+     NGX_RETURN_ON_FAIL(

@@ -20,6 +20,7 @@ into the cookbook. Numbers are fps average or 1% low as noted.
 | Explicit area-light sampling at the first rough secondary wall | Small early settling gain does not repeat in lossless capture; adds about 0.20–0.23 ms to final composition. [Probe and measurement audit](../diagnostics/secondary-area-nee/README.md) |
 | First rough continuation sampled with a spatiotemporal blue-noise mask | No useful cave settling gain in a valid lossless six-turn pair; adds about 0.037 ms to final composition. Exact GPU mask lookup verified. [Private probe](../diagnostics/stbn-continuation/README.md) |
 | Directional specular-reflectance guide on rough opaque walls | Replacing F0 with a roughness/view-dependent GGX approximation does not improve cave settling in one lossless pair. [Guide probe](../diagnostics/specular-reflectance-guide/README.md) |
+| Optional NGX frame-duration hint at the 144 FPS cap | A fixed 6.944 ms hint does not improve cave settling against the recent shared control; unsuitable for variable-rate play. [Native diagnostic](../diagnostics/rr-frame-duration/README.md) |
 
 ## CPU and scheduling
 
