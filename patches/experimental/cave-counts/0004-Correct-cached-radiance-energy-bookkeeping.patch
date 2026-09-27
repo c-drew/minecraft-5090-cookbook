@@ -1,0 +1,81 @@
+From 5fdd17800c54d559c1d4ba8c4d9cc30d9c9df4c5 Mon Sep 17 00:00:00 2001
+From: c-drew <101952850+c-drew@users.noreply.github.com>
+Date: Sun, 27 Sep 2026 06:32:54 -0400
+Subject: [PATCH] Use incoming path weight and consistent emission for cached
+ radiance
+
+---
+ .../ray_tracing/internal/advanced/world/default.rchit     | 7 +++++++
+ .../ray_tracing/internal/advanced/world/no_height.rchit   | 7 +++++++
+ .../world/ray_tracing/internal/advanced/world/world.rgen  | 8 +++++++-
+ 3 files changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/src/shader/world/ray_tracing/internal/advanced/world/default.rchit b/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
+index b3faa01..c4f4ac3 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
+@@ -609,8 +609,15 @@ void main() {
+     vec3 currentViewDir = viewDir;
+     bool storedLobeType = false;
+     for (int localBounce = 0; localBounce < 1; ++localBounce) {
++#if defined(SHARC_UPDATE) && SHARC_UPDATE
++        // Cache entries will be queried by indirect paths regardless of which
++        // update bounce discovered the surface; camera-visible emission scaling
++        // must not be baked into those shared entries.
++        float emissionFactor = ADV_INDIRECT_LIGHT_STRENGTH;
++#else
+         float emissionFactor =
+             (bounce == 0u && localBounce == 0) ? ADV_DIRECT_LIGHT_STRENGTH : ADV_INDIRECT_LIGHT_STRENGTH;
++#endif
+         vec3 emissionRadiance = emissionFactor * currentSurface.tint * currentSurface.mat.emission * mainRay.throughput;
+         emissionRadiance += currentSurface.tint * albedoEmission * mainRay.throughput;
+         mainRay.radiance += emissionRadiance;
+diff --git a/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit b/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
+index b3faa01..c4f4ac3 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
+@@ -609,8 +609,15 @@ void main() {
+     vec3 currentViewDir = viewDir;
+     bool storedLobeType = false;
+     for (int localBounce = 0; localBounce < 1; ++localBounce) {
++#if defined(SHARC_UPDATE) && SHARC_UPDATE
++        // Cache entries will be queried by indirect paths regardless of which
++        // update bounce discovered the surface; camera-visible emission scaling
++        // must not be baked into those shared entries.
++        float emissionFactor = ADV_INDIRECT_LIGHT_STRENGTH;
++#else
+         float emissionFactor =
+             (bounce == 0u && localBounce == 0) ? ADV_DIRECT_LIGHT_STRENGTH : ADV_INDIRECT_LIGHT_STRENGTH;
++#endif
+         vec3 emissionRadiance = emissionFactor * currentSurface.tint * currentSurface.mat.emission * mainRay.throughput;
+         emissionRadiance += currentSurface.tint * albedoEmission * mainRay.throughput;
+         mainRay.radiance += emissionRadiance;
+diff --git a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+index 978e37d..e6684f1 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+@@ -781,6 +781,12 @@ void traceSecondary(inout MainRay rayState,
+ 
+         vec3 tracedOrigin = rayState.origin;
+         vec3 tracedDirection = rayState.direction;
++#if SHARC_QUERY && USE_SHARC
++        // Cached outgoing radiance replaces this hit's shading. Weight it by
++        // the incoming path throughput, before sampling this hit's BSDF.
++        vec3 radianceBeforeHit = rayState.radiance;
++        vec3 throughputBeforeHit = rayState.throughput;
++#endif
+         mainRay = rayState;
+         uint missId = ADV_WORLD_NO_VOLUMETRIC_MISS_INDEX;
+         if (b == startBounce) {
+@@ -813,7 +819,7 @@ void traceSecondary(inout MainRay rayState,
+                 vec3 cachedRadiance = vec3(0.0);
+                 if (SharcGetCachedRadiance(sharcParameters, sharcHitData, cachedRadiance, false)) {
+                     sharcCacheHit = true;
+-                    rayState.radiance += cachedRadiance * rayState.throughput;
++                    rayState.radiance = radianceBeforeHit + cachedRadiance * throughputBeforeHit;
+                     break;
+                 }
+             }
+-- 
+2.55.0
+

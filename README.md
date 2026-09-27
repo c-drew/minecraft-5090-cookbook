@@ -13,7 +13,7 @@ It is a personal project. It is not affiliated with Radiance, Voxy, Mojang, Micr
 that the original standing and movement benchmarks did not catch. Camera and shadow improvements
 are included below; they do not eliminate the light-sampling artifacts. A minimum of 144 FPS with
 no visible defects remains a target, not a verified result across gameplay. See the
-[cave investigation and optional sampling correction](docs/cave-artifacts.md) for measurements,
+[cave investigation and optional sampling/cache corrections](docs/cave-artifacts.md) for measurements,
 reproduction steps, and a correction to an invalid outdoor-walking comparison.
 
 ## Results

@@ -2,7 +2,8 @@
 
 Status, September 27, 2026: a real reservoir-count defect is corrected and the
 observed spots are substantially reduced. Fine transient noise remains. A
-sampling optimization preserves comparable stability with 48 candidates. Valid
+sampling optimization preserves comparable stability with 48 candidates. A
+subsequent cache-energy correction provides a small additional improvement. Valid
 outdoor traversal tests exceed 144 FPS at the 1% low, but rare longer frames and
 rapid-turn spikes remain. This does not establish a strict 144 FPS minimum or
 eliminate all visible defects. An earlier outdoor comparison was invalid; its
@@ -111,8 +112,8 @@ The relevant shader settings are `initial_samples=48`,
 `player_block_light_shadows=render_pipeline.false`.
 The sample count is light candidates per pixel, not full path samples.
 
-The current optional stack includes the count correction and the sampling
-optimization below. To reproduce the earlier count-only comparison, apply only
+The current optional stack includes the count correction, sampling optimizations
+and cache-energy correction below. To reproduce the earlier count-only comparison, apply only
 experimental patch 0001 and use 64 candidates with history cap 24.
 
 Download Linux SR and RR libraries from the official
@@ -245,7 +246,8 @@ performance profile; this experiment is not silently included in it.
   The cave also brightened. The diagnostic was rejected.
 - Randomly shifted, stratified spatial-donor positions gave no material gain
   (0.03336 at 50 ms). The published shader retains the tested random positions.
-- Disabling SHaRC or changing RR from F to E did not remove the fast-turn spots.
+- Earlier, pre-count-fix tests disabling SHaRC or changing RR from F to E did not
+  remove the fast-turn spots. Later cache-disabled results are documented below.
 - Disabling both reuse stages, or keeping spatial reuse alone, darkened the cave.
   Lower absolute image error from a darker image is not evidence of a fair fix.
 - Keeping temporal reuse alone worsened the speckling.
@@ -257,7 +259,7 @@ performance profile; this experiment is not silently included in it.
 Further tests of the corrected 48-candidate, cap-8 profile help separate remaining
 noise sources. One-bounce lighting lowers 50 ms relative RMS to 0.01925, but
 darkens the walls and removes indirect lighting. Raising light candidates to
-128 retains four bounces but gives only 0.03187, close to the installed 0.03320.
+128 retains four bounces but gives only 0.03187, close to the preceding 0.03320.
 Neither was selected. Averaging two indirect paths gives 0.03241 at 50 ms and
 0.02086 at 300 ms, while final-compose GPU time rises from about 1.22 to 3.00 ms.
 That diagnostic retains first-path guide data and is not suitable for shipping;
@@ -277,7 +279,7 @@ This repository distributes the code, settings, protocol, and measured results.
 
 ## Distinguishing engine timing from compositor timing
 
-Two new 30-second tests use the installed 48-candidate, cap-8 profile and ten
+Two 30-second tests use the pre-cache-correction 48-candidate, cap-8 profile and ten
 rapid turns per interval. Recording stops before these measurements. The native
 log covers more than 99.97% of each explicit window. It measures one engine
 `acquireContext` entry to the next, including Java work and GPU/presentation
@@ -317,3 +319,77 @@ inside the requested window are counted. Inspect `window_coverage`; missing or
 incomplete logs must not be used to claim a frame-time floor. The private runner
 now records this window and parses the native log after clean shutdown whenever
 `MCVR_CPU_FRAME_LOG` is enabled.
+
+## Correcting cached-radiance energy
+
+Experimental patch 0004 fixes two cache-bookkeeping issues. On a cache hit, the
+query path previously added cached radiance after local shading and weighted it
+with the newly sampled BSDF. It now replaces that local contribution and uses
+the incoming path throughput. The SHaRC entry already includes local radiance
+and later weighted path contributions. Material demodulation and separate
+emission are disabled in this build.
+
+Cache updates also used camera-visible emission strength at bounce zero and
+indirect strength at later bounces, writing both to the same world cache. The
+update variants now consistently use indirect emission strength. Normal
+camera-visible emission and the separate vertex-emission term are unchanged.
+This follows the update/query separation in NVIDIA's
+[SHaRC integration guide](https://github.com/NVIDIA-RTX/SHARC/blob/main/docs/Integration.md).
+Cache eligibility and cone gating are unchanged and remain separate audit leads.
+
+The installed profile retains 48 candidates, history cap 8, strength 32, four
+bounces and SHaRC. Two launches with six turns each give:
+
+| Mean relative wall RMS | Before cache correction | After, 12 turns |
+|---|---:|---:|
+| 50 ms | 0.03320 | 0.03080 |
+| 150 ms | 0.02622 | 0.02479 |
+| 300 ms | 0.02210 | 0.02118 |
+| 600 ms | 0.01629 | 0.01586 |
+| 1.2 s | 0.01166 | 0.01136 |
+| 2.3 s | 0.00356 | 0.00350 |
+
+Settled wall luma is 81.97/43.53 versus 82.23/44.00. This is about 7% lower early
+error from the cache correction, and about 68% lower than the original faulty
+sampler. Fine transient noise remains. The metric compares each image with its
+own later settled reference; it cannot establish unbiased lighting, an artifact
+count, or absence of discomfort during play.
+
+Three material captures retain surface relief and metallic/glass/water
+reflections. Mean crop luma changes by +3.70/+2.15/+0.10 on the 8-bit scale.
+These checks cover a limited set of materials. Ninety-two affected shader
+variants compiled, and all 85 advanced shader sources in the clean patch-stack
+checkout match the tested jar. Java/native payloads are unchanged. Tested jar
+SHA256: `c10e03af5f90c563621d32346cb804db0415c6e39e07a432140f82b56427f600`.
+
+Four forest intervals each traveled a verified 190.81 blocks on the same
+artificial elevated lane. The first two averaged 221.96/221.20 FPS in MangoApp,
+comparable to the preceding profile. The first interval includes a 49.11 ms gap
+without an accompanying native log; its cause remains unknown. Two instrumented
+repeats did not reproduce that gap:
+
+| Instrumented repeat, first / second | Engine wall interval | MangoApp interval |
+|---|---:|---:|
+| Average FPS | 222.61 / 220.65 | 222.52 / 220.70 |
+| 1% low FPS | 146.29 / 146.04 | 181.21 / 179.10 |
+| Worst interval, ms | 8.91 / 10.30 | 6.63 / 8.81 |
+| Intervals over 6.944 ms | 22 / 28 | 0 / 2 |
+
+Native log coverage exceeds 99.98% for each 30-second interval. These results
+retain the original outlier and distinguish the timing sources; they do not
+prove a strict 144 FPS floor or delivery to a physical fullscreen display.
+
+Disabling SHaRC was also tested with the preceding shader build. Four uncached
+bounces lower 50 ms relative RMS to 0.02854 and raise forest average throughput
+to about 240 FPS, but darken the three material crops by 11.62/8.61/2.56 luma.
+Eight uncached bounces recover only part of that room lighting and reduce
+throughput to about 218 FPS. Both cache-disabled profiles were rejected as
+general replacements. The combined correction retains the brighter interiors.
+Individual query-only and emission-only jars were built but not independently
+playtested, so their visual effects cannot be separated from this experiment.
+
+See [cache measurements](../measurements/cave-cache-energy-2026-09-27.json) for
+full-precision results, all twelve turn events, and the rejected alternatives.
+The cache correction changes only the jar; reverting just this step restores
+the preceding optimized jar while keeping its matching settings. Perform this
+rollback before reverting the earlier sampling/count steps.
