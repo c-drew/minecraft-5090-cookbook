@@ -20,6 +20,9 @@ engine timing during rapid turns without changing shader quality. Rare long
 frames and physical display validation remain unresolved.
 The [cache-allocation correction](docs/sharc-overflow.md) fixes a separately
 reproduced GPU failure path; it does not establish a cure for the remaining spots.
+The later [runtime cache-update correction](docs/sharc-update-runtime.md) makes
+an earlier inactive emission rule work in shared hit shaders. It provides a
+further modest convergence gain and changes brightness in the glowstone test room.
 
 ## Results
 

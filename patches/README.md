@@ -29,6 +29,9 @@ rapid-turn engine pacing while leaving shaders unchanged; see
 MCVR patches with `MCVR_CAVE_COUNTS=1 scripts/build.sh`. It corrects failed-sample
 count retention and requires a matching lighting calibration. See
 [the evidence and limitations](../docs/cave-artifacts.md) before enabling it.
+Its patch 0005 identifies cache-update rays at runtime because the engine shares
+hit shaders between query and update pipelines. It supersedes the inactive
+emission branch in 0004; see [verification and brightness changes](../docs/sharc-update-runtime.md).
 
 By hand:
 

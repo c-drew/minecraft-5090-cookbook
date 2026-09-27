@@ -323,19 +323,20 @@ now records this window and parses the native log after clean shutdown whenever
 
 ## Correcting cached-radiance energy
 
-Experimental patch 0004 fixes two cache-bookkeeping issues. On a cache hit, the
+Experimental patch 0004 corrects query-side cache bookkeeping. On a cache hit, the
 query path previously added cached radiance after local shading and weighted it
 with the newly sampled BSDF. It now replaces that local contribution and uses
 the incoming path throughput. The SHaRC entry already includes local radiance
 and later weighted path contributions. Material demodulation and separate
 emission are disabled in this build.
 
-Cache updates also used camera-visible emission strength at bounce zero and
-indirect strength at later bounces, writing both to the same world cache. The
-update variants now consistently use indirect emission strength. Normal
-camera-visible emission and the separate vertex-emission term are unchanged.
-This follows the update/query separation in NVIDIA's
-[SHaRC integration guide](https://github.com/NVIDIA-RTX/SHARC/blob/main/docs/Integration.md).
+**Later correction to this report:** patch 0004 also attempted to make update
+emission consistent, but its `SHARC_UPDATE` branch was inactive in the engine's
+shared hit shaders. The historical results below include the query correction,
+not an active emission correction. A later
+[runtime ray flag](sharc-update-runtime.md) implements that distinction and
+documents the resulting brightness change. Actual configured direct/indirect
+strengths are 32/8; the fallback macro value of 1 is not this profile's setting.
 Cache eligibility and cone gating are unchanged in the selected build.
 
 The installed profile retains 48 candidates, history cap 8, strength 32, four

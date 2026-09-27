@@ -1,0 +1,121 @@
+From 5a1dd06f869227ca583f580a0fb081c661f83637 Mon Sep 17 00:00:00 2001
+From: c-drew <101952850+c-drew@users.noreply.github.com>
+Date: Sun, 27 Sep 2026 10:08:21 -0400
+Subject: [PATCH] Identify SHaRC updates in shared hit shaders through the ray
+ payload
+
+---
+ src/shader/util/ray.glsl                            | 10 ++++++++++
+ .../internal/advanced/common/transparent_only.rchit |  3 ++-
+ .../internal/advanced/world/default.rchit           | 13 ++++---------
+ .../internal/advanced/world/no_height.rchit         | 13 ++++---------
+ .../ray_tracing/internal/advanced/world/world.rgen  |  3 +++
+ 5 files changed, 23 insertions(+), 19 deletions(-)
+
+diff --git a/src/shader/util/ray.glsl b/src/shader/util/ray.glsl
+index 592f154..4b6f89d 100644
+--- a/src/shader/util/ray.glsl
++++ b/src/shader/util/ray.glsl
+@@ -24,6 +24,8 @@ const uint rayCaptureSurfaceBit = 1u << 16u;
+ const uint raySurfaceCacheWrittenBit = 1u << 17u;
+ const uint raySurfaceCacheTargetSecondaryBit = 1u << 18u;
+ const uint rayIndirectVolumetricCloudBit = 1u << 19u;
++// Shared hit shaders need the update/query distinction in the ray payload.
++const uint raySharcUpdateBit = 1u << 20u;
+ 
+ ivec3 rayMaterialStateCoord(int layer) {
+     return ivec3(ivec2(gl_LaunchIDEXT.xy), layer);
+@@ -37,6 +39,14 @@ uint rayBounce(MainRay ray) {
+     return ray.stateBits & rayBounceMask;
+ }
+ 
++void raySetSharcUpdate(inout MainRay ray, bool enabled) {
++    ray.stateBits = enabled ? (ray.stateBits | raySharcUpdateBit) : (ray.stateBits & ~raySharcUpdateBit);
++}
++
++bool rayIsSharcUpdate(MainRay ray) {
++    return (ray.stateBits & raySharcUpdateBit) != 0u;
++}
++
+ void raySetInsideBoat(inout MainRay ray, bool enabled) {
+     ray.stateBits = enabled ? (ray.stateBits | rayInsideBoatBit) : (ray.stateBits & ~rayInsideBoatBit);
+ }
+diff --git a/src/shader/world/ray_tracing/internal/advanced/common/transparent_only.rchit b/src/shader/world/ray_tracing/internal/advanced/common/transparent_only.rchit
+index 971da1d..69d881b 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/common/transparent_only.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/common/transparent_only.rchit
+@@ -110,7 +110,8 @@ void main() {
+     vec3 shadedRgb = clamp(shaded.rgb, vec3(0.0), vec3(1.0));
+     vec3 transmittance = vec3(clamp(albedo.a, 0.0, 1.0));
+ 
+-    float factor = rayBounce(mainRay) == 0u ? ADV_DIRECT_LIGHT_STRENGTH : ADV_INDIRECT_LIGHT_STRENGTH;
++    float factor = (rayBounce(mainRay) == 0u && !rayIsSharcUpdate(mainRay)) ?
++                       ADV_DIRECT_LIGHT_STRENGTH : ADV_INDIRECT_LIGHT_STRENGTH;
+     mainRay.radiance += factor * shadedRgb * alpha * pbrEmission * mainRay.throughput;
+     mainRay.throughput *= transmittance;
+ 
+diff --git a/src/shader/world/ray_tracing/internal/advanced/world/default.rchit b/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
+index c4f4ac3..fe9e62c 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
+@@ -609,15 +609,10 @@ void main() {
+     vec3 currentViewDir = viewDir;
+     bool storedLobeType = false;
+     for (int localBounce = 0; localBounce < 1; ++localBounce) {
+-#if defined(SHARC_UPDATE) && SHARC_UPDATE
+-        // Cache entries will be queried by indirect paths regardless of which
+-        // update bounce discovered the surface; camera-visible emission scaling
+-        // must not be baked into those shared entries.
+-        float emissionFactor = ADV_INDIRECT_LIGHT_STRENGTH;
+-#else
+-        float emissionFactor =
+-            (bounce == 0u && localBounce == 0) ? ADV_DIRECT_LIGHT_STRENGTH : ADV_INDIRECT_LIGHT_STRENGTH;
+-#endif
++        // SHaRC's first update hit is not a camera-visible emission sample.
++        // Hit shaders are shared, so a ray flag carries the update distinction.
++        float emissionFactor = (bounce == 0u && localBounce == 0 && !rayIsSharcUpdate(mainRay)) ?
++                                   ADV_DIRECT_LIGHT_STRENGTH : ADV_INDIRECT_LIGHT_STRENGTH;
+         vec3 emissionRadiance = emissionFactor * currentSurface.tint * currentSurface.mat.emission * mainRay.throughput;
+         emissionRadiance += currentSurface.tint * albedoEmission * mainRay.throughput;
+         mainRay.radiance += emissionRadiance;
+diff --git a/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit b/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
+index c4f4ac3..fe9e62c 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
+@@ -609,15 +609,10 @@ void main() {
+     vec3 currentViewDir = viewDir;
+     bool storedLobeType = false;
+     for (int localBounce = 0; localBounce < 1; ++localBounce) {
+-#if defined(SHARC_UPDATE) && SHARC_UPDATE
+-        // Cache entries will be queried by indirect paths regardless of which
+-        // update bounce discovered the surface; camera-visible emission scaling
+-        // must not be baked into those shared entries.
+-        float emissionFactor = ADV_INDIRECT_LIGHT_STRENGTH;
+-#else
+-        float emissionFactor =
+-            (bounce == 0u && localBounce == 0) ? ADV_DIRECT_LIGHT_STRENGTH : ADV_INDIRECT_LIGHT_STRENGTH;
+-#endif
++        // SHaRC's first update hit is not a camera-visible emission sample.
++        // Hit shaders are shared, so a ray flag carries the update distinction.
++        float emissionFactor = (bounce == 0u && localBounce == 0 && !rayIsSharcUpdate(mainRay)) ?
++                                   ADV_DIRECT_LIGHT_STRENGTH : ADV_INDIRECT_LIGHT_STRENGTH;
+         vec3 emissionRadiance = emissionFactor * currentSurface.tint * currentSurface.mat.emission * mainRay.throughput;
+         emissionRadiance += currentSurface.tint * albedoEmission * mainRay.throughput;
+         mainRay.radiance += emissionRadiance;
+diff --git a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+index e6684f1..c66a06d 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+@@ -947,6 +947,9 @@ void traceSharcUpdate(
+ 
+     initMainRay(origin, direction, worldUBO.seed ^ sharcConfig.frameIndex, coneSpreadFromFov(fovY, fovX, resolution),
+                     mainRay);
++    // Hit/miss shaders are shared by both pipelines and do not receive
++    // SHARC_UPDATE. Keep the distinction through every reset/bounce instead.
++    raySetSharcUpdate(mainRay, true);
+ 
+     for (int b = 0; b < ADV_NUM_RAY_BOUNCES; ++b) {
+         resetMainRay(mainRay, b);
+-- 
+2.55.0
+

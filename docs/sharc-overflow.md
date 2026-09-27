@@ -1,5 +1,8 @@
 # Failed SHaRC allocations must not alias slot zero
 
+The later [runtime update-identification release](sharc-update-runtime.md)
+retains this allocation guard and supersedes the installed artifact recorded here.
+
 September 27, 2026: a standalone RTX 5090 test reproduces an allocation-failure
 bug in the bundled SHaRC 1.6.5 shaders. A small header correction passes all
 twelve GPU invariants and is installed after private cave, forest and material

@@ -1,0 +1,82 @@
+--- a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+@@ -74,6 +74,7 @@
+ #if USE_SHARC
+ // clang-format off
+ #    include "extern/sharc/include/SharcGlsl.h"
++#    define SHARC_SEPARATE_EMISSIVE 1
+ #    include "extern/sharc/include/SharcCommon.h"
+ // clang-format on
+ #endif
+@@ -816,6 +817,8 @@
+                 SharcHitData sharcHitData;
+                 sharcHitData.positionWorld = positionWorld;
+                 sharcHitData.normalWorld = rayState.normal;
++                // Continuation-hit payload carries local emission before path weighting.
++                sharcHitData.emissive = rayState.directLightRadiance;
+                 vec3 cachedRadiance = vec3(0.0);
+                 if (SharcGetCachedRadiance(sharcParameters, sharcHitData, cachedRadiance, false)) {
+                     sharcCacheHit = true;
+@@ -982,7 +985,11 @@
+         SharcHitData sharcHitData;
+         sharcHitData.positionWorld = tracedOrigin + tracedDirection * mainRay.hitT + vec3(worldUBO.cameraPos.xyz);
+         sharcHitData.normalWorld = mainRay.normal;
+-        bool accepted = SharcUpdateHit(sharcParameters, sharcState, sharcHitData, mainRay.radiance, rand(mainRay.seed));
++        // Store reflected light in the voxel, then add this surface's exact
++        // emission only when propagating to earlier vertices or querying it.
++        sharcHitData.emissive = mainRay.directLightRadiance;
++        vec3 reflectedRadiance = max(mainRay.radiance - sharcHitData.emissive, vec3(0.0));
++        bool accepted = SharcUpdateHit(sharcParameters, sharcState, sharcHitData, reflectedRadiance, rand(mainRay.seed));
+         if (!accepted) { break; }
+ 
+         SharcSetThroughput(sharcState, max(mainRay.throughput, vec3(0.0)));
+--- a/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
+@@ -618,16 +618,18 @@
+         float emissionFactor =
+             (bounce == 0u && localBounce == 0) ? ADV_DIRECT_LIGHT_STRENGTH : ADV_INDIRECT_LIGHT_STRENGTH;
+ #endif
+-        vec3 emissionRadiance = emissionFactor * currentSurface.tint * currentSurface.mat.emission * mainRay.throughput;
+-        emissionRadiance += currentSurface.tint * albedoEmission * mainRay.throughput;
+-        mainRay.radiance += emissionRadiance;
++        vec3 localEmission = emissionFactor * currentSurface.tint * currentSurface.mat.emission;
++        localEmission += currentSurface.tint * albedoEmission;
++        mainRay.radiance += localEmission * mainRay.throughput;
++        // This continuation-only payload field is consumed by SHaRC update/query.
++        // Keep local emission independent of the incoming path throughput.
++        if (localBounce == 0) { mainRay.directLightRadiance = localEmission; }
+ 
+         vec3 directLight =
+             sampleSurfaceDirectionalLight(currentSurface, currentViewDir, textureUV, planeHitWorldPos, atlasUvMin,
+                                           atlasUvMax, dPduWorld, dPdvWorld, baseGeoNormal,
+                                           traceLocalHeight, textureMap.normal, maxDepthWorld,
+                                           hasFftWaterSurface, incomingWaterEntry);
+-        if (localBounce == 0) { mainRay.directLightRadiance = directLight; }
+         mainRay.radiance += directLight;
+ 
+         bool isOpaqueSurface = currentSurface.mat.transmission <= EPS;
+--- a/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
+@@ -618,16 +618,18 @@
+         float emissionFactor =
+             (bounce == 0u && localBounce == 0) ? ADV_DIRECT_LIGHT_STRENGTH : ADV_INDIRECT_LIGHT_STRENGTH;
+ #endif
+-        vec3 emissionRadiance = emissionFactor * currentSurface.tint * currentSurface.mat.emission * mainRay.throughput;
+-        emissionRadiance += currentSurface.tint * albedoEmission * mainRay.throughput;
+-        mainRay.radiance += emissionRadiance;
++        vec3 localEmission = emissionFactor * currentSurface.tint * currentSurface.mat.emission;
++        localEmission += currentSurface.tint * albedoEmission;
++        mainRay.radiance += localEmission * mainRay.throughput;
++        // This continuation-only payload field is consumed by SHaRC update/query.
++        // Keep local emission independent of the incoming path throughput.
++        if (localBounce == 0) { mainRay.directLightRadiance = localEmission; }
+ 
+         vec3 directLight =
+             sampleSurfaceDirectionalLight(currentSurface, currentViewDir, textureUV, planeHitWorldPos, atlasUvMin,
+                                           atlasUvMax, dPduWorld, dPdvWorld, baseGeoNormal,
+                                           traceLocalHeight, textureMap.normal, maxDepthWorld,
+                                           hasFftWaterSurface, incomingWaterEntry);
+-        if (localBounce == 0) { mainRay.directLightRadiance = directLight; }
+         mainRay.radiance += directLight;
+ 
+         bool isOpaqueSurface = currentSurface.mat.transmission <= EPS;

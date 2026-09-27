@@ -1,0 +1,12 @@
+--- a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+@@ -1360,6 +1360,9 @@
+ 
+     if (!hitSky && isFirstHitNoisy && !isFirstHitTransparent) {
+         if (isFirstHitDiffuse) { firstHitIndirectRadiance = mainRay.radiance; }
++        // Diagnostic: retain tracing/cache work; show only continuation radiance.
++        firstHitEmission = vec3(0.0);
++        firstHitDirectRadiance = vec3(0.0);
+         mainRay.radiance += firstHitEmission + firstHitDirectRadiance;
+     }
+ 
