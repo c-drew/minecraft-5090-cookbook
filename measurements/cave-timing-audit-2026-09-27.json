@@ -1,0 +1,109 @@
+{
+  "date": "2026-09-27",
+  "note": "Private headless Gamescope tests; acquire-to-acquire engine wall intervals and MangoApp intervals measure different boundaries. Neither establishes physical display delivery. No strict 144 FPS minimum is established.",
+  "profile": {
+    "jar_sha256": "0a74c082111f70e404a319d88ce65ba2f9392d33b5f55922db78f5b0b3a18271",
+    "output_size": [
+      2560,
+      1440
+    ],
+    "ray_input_size": [
+      1334,
+      750
+    ],
+    "initial_candidates": 48,
+    "temporal_confidence_cap": 8,
+    "direct_light_strength": 32,
+    "ray_bounces": 4,
+    "dlss_runtime": "310.9.1",
+    "requested_rr_preset": 6,
+    "radiance_cap": 260,
+    "vsync": false
+  },
+  "protocol": "Two 30-second windows in one launch, ten rapid half-turns in each; capture ended before timing.",
+  "engine_metric_definition": "Complete acquire-to-acquire intervals wholly inside each explicit 30-second wall-clock window. Includes render-thread Java/native work and GPU/presentation waits. Log parsed only after game exit.",
+  "runs": [
+    {
+      "label": "current-engine-turns-a",
+      "engine_window_unix_s": [
+        1790502346.2287416,
+        1790502376.2287416
+      ],
+      "engine_metrics": {
+        "scope": "engine acquire-to-acquire wall interval; not display delivery",
+        "frames": 5797,
+        "seconds": 29.997485,
+        "window_seconds": 30.0,
+        "window_coverage": 0.9999161666666667,
+        "fps": 193.24953408594087,
+        "one_percent_low": 106.12252497137484,
+        "median_ms": 5.11,
+        "p99_ms": 7.609,
+        "worst_ms": 15.457,
+        "over_144_count": 77,
+        "over_144_percent": 1.3282732447817838
+      },
+      "mangoapp_metrics": {
+        "frames": 5680,
+        "seconds": 29.868866286,
+        "fps": 190.16456619454297,
+        "one_percent_low": 60.34326763470845,
+        "median_ms": 5.068415,
+        "p99_ms": 6.04891,
+        "worst_ms": 64.5838,
+        "over_144_count": 48,
+        "over_144_percent": 0.8450704225352113
+      }
+    },
+    {
+      "label": "current-engine-turns-b",
+      "engine_window_unix_s": [
+        1790502381.6694102,
+        1790502411.6694102
+      ],
+      "engine_metrics": {
+        "scope": "engine acquire-to-acquire wall interval; not display delivery",
+        "frames": 5797,
+        "seconds": 29.992283,
+        "window_seconds": 30.0,
+        "window_coverage": 0.9997427666666667,
+        "fps": 193.2830521771217,
+        "one_percent_low": 107.64933512371177,
+        "median_ms": 5.113,
+        "p99_ms": 7.62,
+        "worst_ms": 15.202,
+        "over_144_count": 77,
+        "over_144_percent": 1.3282732447817838
+      },
+      "mangoapp_metrics": {
+        "frames": 5648,
+        "seconds": 29.63539905,
+        "fps": 190.58289009271837,
+        "one_percent_low": 66.89831562345772,
+        "median_ms": 5.0712150000000005,
+        "p99_ms": 6.14557,
+        "worst_ms": 70.1892,
+        "over_144_count": 54,
+        "over_144_percent": 0.9560906515580736
+      }
+    }
+  ],
+  "source_audit": {
+    "installed_package_versions": {
+      "gamescope": "3.16.25-1",
+      "mangohud": "0.8.4-1.1"
+    },
+    "scope": "Upstream tags corresponding to installed version numbers; distribution patches and installed binary layout have not been verified.",
+    "finding": "Upstream Gamescope 3.16.25 and MangoHud v0.8.4 name the first and second timing packet fields in opposite order. Gamescope writes image-readiness deltas into the first field; this MangoHud source logs the first field. This is a source-level lead, not confirmation of an installed binary defect or an explanation for every measured gap.",
+    "sources": [
+      "https://github.com/ValveSoftware/gamescope/blob/3.16.25/src/mangoapp.cpp",
+      "https://github.com/ValveSoftware/gamescope/blob/3.16.25/src/commit.cpp",
+      "https://github.com/flightlessmango/MangoHud/blob/v0.8.4/src/app/mangoapp_proto.h",
+      "https://github.com/flightlessmango/MangoHud/blob/v0.8.4/src/app/main.cpp"
+    ]
+  },
+  "local_log_sha256": {
+    "cpu-frames.csv": "9d42f6d24bf9b04464ef34fd744e9446c5deb53f9cc068d58c78bf85d59420a3",
+    "gpu-frames.csv": "016e6ff43c685f2474e6648eb69d9547811a39a2c9d0fa5347f70759252bf1a4"
+  }
+}

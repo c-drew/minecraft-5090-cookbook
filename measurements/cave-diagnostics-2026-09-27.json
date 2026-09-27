@@ -1,0 +1,194 @@
+{
+  "date": "2026-09-27",
+  "note": "Six private rapid cave turns per diagnostic, 144 FPS cap, same 2560x1440 output and 1334x750 ray input. Metrics are exposure-normalized differences from each shot's own settled image, not ground-truth error or artifact counts. No diagnostic here replaces the installed 48-candidate/history-8 profile.",
+  "runs": [
+    {
+      "label": "installed-reference",
+      "status": "Current installed profile; six of the twelve previously published turns.",
+      "turns": 6,
+      "delays_s": [
+        0.05,
+        0.15,
+        0.3,
+        0.6,
+        1.2,
+        2.3
+      ],
+      "mean_relative_rms": [
+        0.032958361491793105,
+        0.02638283615044303,
+        0.02221444921500172,
+        0.01620736094386112,
+        0.011684655614090614,
+        0.003494284971089256
+      ],
+      "settled_luma_down_up": [
+        82.25136985907572,
+        44.00787216633003
+      ]
+    },
+    {
+      "label": "no-temporal-history",
+      "status": "Temporal carry disabled, spatial reuse retained. Worse noise; rejected.",
+      "turns": 6,
+      "delays_s": [
+        0.05,
+        0.15,
+        0.3,
+        0.6,
+        1.2,
+        2.3
+      ],
+      "mean_relative_rms": [
+        0.044499850312673846,
+        0.03584219656686351,
+        0.029522653562828252,
+        0.021383464007876798,
+        0.013805694901955922,
+        0.0037908643416949992
+      ],
+      "settled_luma_down_up": [
+        84.36128479062134,
+        45.48528576076368
+      ]
+    },
+    {
+      "label": "spatial-stratification",
+      "status": "Randomly shifted Hammersley disk donors. No material gain; rejected.",
+      "turns": 6,
+      "delays_s": [
+        0.05,
+        0.15,
+        0.3,
+        0.6,
+        1.2,
+        2.3
+      ],
+      "mean_relative_rms": [
+        0.033361069319292745,
+        0.026380913189414077,
+        0.02197365589095648,
+        0.016215229969159018,
+        0.011500967840808462,
+        0.0037088896598863096
+      ],
+      "settled_luma_down_up": [
+        82.21709922464987,
+        44.00825533457832
+      ]
+    },
+    {
+      "label": "one-bounce",
+      "status": "One bounce removes indirect lighting and darkens the scene. Diagnostic only; rejected as a quality profile.",
+      "turns": 6,
+      "delays_s": [
+        0.05,
+        0.15,
+        0.3,
+        0.6,
+        1.2,
+        2.3
+      ],
+      "mean_relative_rms": [
+        0.01924595255584386,
+        0.015432606180013736,
+        0.013720449203093333,
+        0.011053745859526235,
+        0.009651898925583682,
+        0.004027252519540038
+      ],
+      "settled_luma_down_up": [
+        79.24707534851814,
+        40.14032968828615
+      ]
+    },
+    {
+      "label": "128-initial-candidates",
+      "status": "Four bounces retained; 128 light candidates. Little convergence gain for much more initial-generation work; rejected.",
+      "turns": 6,
+      "delays_s": [
+        0.05,
+        0.15,
+        0.3,
+        0.6,
+        1.2,
+        2.3
+      ],
+      "mean_relative_rms": [
+        0.03186951539882916,
+        0.02582416356513169,
+        0.021716092803751575,
+        0.016278808138436705,
+        0.011381494135968933,
+        0.002994484106087412
+      ],
+      "settled_luma_down_up": [
+        82.08515904288299,
+        43.776352438573284
+      ]
+    },
+    {
+      "label": "continuation-guide",
+      "status": "Classify the actual resampled continuation for denoiser guide data. Cave result essentially unchanged. Archived candidate; material/other-denoiser review still required before general adoption.",
+      "turns": 6,
+      "delays_s": [
+        0.05,
+        0.15,
+        0.3,
+        0.6,
+        1.2,
+        2.3
+      ],
+      "mean_relative_rms": [
+        0.03296574419363639,
+        0.026214246480902113,
+        0.021760398735974285,
+        0.016300116299883455,
+        0.01174390635110103,
+        0.00364184416175328
+      ],
+      "settled_luma_down_up": [
+        82.20348689655097,
+        44.017396828935716
+      ]
+    },
+    {
+      "label": "two-indirect-samples",
+      "status": "Two independent rough opaque continuations averaged, with the guide correction. Small image gain, much higher GPU cost. First-path guide/split signals are a diagnostic limitation. Rejected; not suitable for shipping.",
+      "turns": 6,
+      "delays_s": [
+        0.05,
+        0.15,
+        0.3,
+        0.6,
+        1.2,
+        2.3
+      ],
+      "mean_relative_rms": [
+        0.03240564742036613,
+        0.02524750605073099,
+        0.020856909858893134,
+        0.01605334863050023,
+        0.011381678485504735,
+        0.003126447103420398
+      ],
+      "settled_luma_down_up": [
+        82.16550525139185,
+        44.202321419474714
+      ]
+    }
+  ],
+  "gpu_cost_diagnostic": {
+    "scope": "Final three 300-frame GPU timestamp windows at the settled cave camera, 144 FPS cap; not uncapped throughput.",
+    "continuation_guide_one_path": {
+      "final_compose_ms": 1.217,
+      "initial_generation_ms": 0.781,
+      "gpu_utilization_percent": 73.33333333333333
+    },
+    "two_indirect_samples": {
+      "final_compose_ms": 2.998,
+      "initial_generation_ms": 0.776,
+      "gpu_utilization_percent": 99.0
+    }
+  }
+}

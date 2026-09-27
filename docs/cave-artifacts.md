@@ -240,6 +240,11 @@ performance profile; this experiment is not silently included in it.
 
 ## Diagnostic results
 
+- With the corrected 48-candidate profile and cap 8, removing temporal reuse
+  worsened early relative wall RMS (0.04450 at 50 ms, versus about 0.03320).
+  The cave also brightened. The diagnostic was rejected.
+- Randomly shifted, stratified spatial-donor positions gave no material gain
+  (0.03336 at 50 ms). The published shader retains the tested random positions.
 - Disabling SHaRC or changing RR from F to E did not remove the fast-turn spots.
 - Disabling both reuse stages, or keeping spatial reuse alone, darkened the cave.
   Lower absolute image error from a darker image is not evidence of a fair fix.
@@ -249,5 +254,66 @@ performance profile; this experiment is not silently included in it.
 - The count fix at 16 candidates and strength 32 improved early relative RMS by
   about 45%; 64 candidates improved it further at a measurable GPU cost.
 
+Further tests of the corrected 48-candidate, cap-8 profile help separate remaining
+noise sources. One-bounce lighting lowers 50 ms relative RMS to 0.01925, but
+darkens the walls and removes indirect lighting. Raising light candidates to
+128 retains four bounces but gives only 0.03187, close to the installed 0.03320.
+Neither was selected. Averaging two indirect paths gives 0.03241 at 50 ms and
+0.02086 at 300 ms, while final-compose GPU time rises from about 1.22 to 3.00 ms.
+That diagnostic retains first-path guide data and is not suitable for shipping;
+the small image gain also does not justify its GPU cost.
+
+Source inspection found another guide mismatch: final-compose resamples an
+opaque BSDF but can classify its hit distance using the primary pass's earlier
+lobe choice. A candidate classifies the actual continuation before tracing.
+It compiled in all 92 affected shader variants and completed the cave run,
+but this convergence test was essentially unchanged. It remains archived,
+pending material/other-denoiser review, and is not in the published patch stack.
+See the [diagnostic measurements](../measurements/cave-diagnostics-2026-09-27.json)
+for exact results and limitations.
+
 The private world snapshot, Voxy jar, NVIDIA binaries, and captures remain local.
 This repository distributes the code, settings, protocol, and measured results.
+
+## Distinguishing engine timing from compositor timing
+
+Two new 30-second tests use the installed 48-candidate, cap-8 profile and ten
+rapid turns per interval. Recording stops before these measurements. The native
+log covers more than 99.97% of each explicit window. It measures one engine
+`acquireContext` entry to the next, including Java work and GPU/presentation
+waits; it does not measure when a physical display shows an image.
+
+| Measurement, first / repeat run | Engine wall interval | MangoApp interval |
+|---|---:|---:|
+| Average FPS | 193.25 / 193.28 | 190.16 / 190.58 |
+| 1% low FPS | 106.12 / 107.65 | 60.34 / 66.90 |
+| Worst interval, ms | 15.46 / 15.20 | 64.58 / 70.19 |
+| Intervals over 6.944 ms | 77 / 77 | 48 / 54 |
+
+The engine's longest intervals spend roughly 13 ms waiting on a frame fence.
+These are real engine delays to investigate. The much larger MangoApp gaps
+cannot be treated as equivalent engine-frame durations. These headless results
+also do not establish how the normal fullscreen VSync path behaves.
+
+There is a source-level timing-protocol lead: the first two timing fields in
+[Gamescope 3.16.25](https://github.com/ValveSoftware/gamescope/blob/3.16.25/src/mangoapp.cpp)
+and [MangoHud v0.8.4](https://github.com/flightlessmango/MangoHud/blob/v0.8.4/src/app/mangoapp_proto.h)
+have opposite names/order. Gamescope fills its first timing field from
+[image-readiness notifications](https://github.com/ValveSoftware/gamescope/blob/3.16.25/src/commit.cpp),
+and this MangoHud version logs that field. These upstream tags match the installed
+version numbers, but distribution patches and installed binary layout have not
+been checked. This is not a confirmed installed-binary bug or proof that the
+compositor delivered every rendered frame.
+
+The [timing audit](../measurements/cave-timing-audit-2026-09-27.json) preserves
+both sets of metrics and their scopes. To analyze a complete native log:
+
+```sh
+python3 tools/engine_frame_metrics.py cpu-frames.csv --start UNIX_SECONDS --end UNIX_SECONDS
+```
+
+Read it after the game exits so buffered rows are complete. Only intervals wholly
+inside the requested window are counted. Inspect `window_coverage`; missing or
+incomplete logs must not be used to claim a frame-time floor. The private runner
+now records this window and parses the native log after clean shutdown whenever
+`MCVR_CPU_FRAME_LOG` is enabled.
