@@ -1,0 +1,131 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_buffer_reference2 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+#extension GL_EXT_shader_16bit_storage : require
+#extension GL_EXT_shader_atomic_int64 : require
+#extension GL_EXT_control_flow_attributes : require
+
+#define SHARC_ENABLE_GLSL 1
+#define SHARC_ENABLE_64_BIT_ATOMICS 1
+#define SHARC_UPDATE 1
+#define SHARC_QUERY 1
+#include "SharcGlsl.h"
+#include "SharcCommon.h"
+
+layout(local_size_x = 1) in;
+layout(std430, set = 0, binding = 0) buffer Results { uint result[]; };
+layout(push_constant) uniform Addresses {
+    uint64_t hashes;
+    uint64_t accumulation;
+    uint64_t resolved;
+} addresses;
+
+void clearData(SharcParameters p) {
+    for (uint i = 0; i < 16; ++i) {
+        p.hashMapData.hashEntriesBuffer.data[i] = uint64_t(0);
+        p.accumulationBuffer.data[i].data = uvec4(0);
+        p.resolvedBuffer.data[i] = SharcPackVoxelData(vec3(0), 0, 0, 0, 0);
+    }
+    memoryBarrierBuffer();
+}
+
+uint64_t otherKey(uint i, uint64_t wanted) {
+    uint64_t value = uint64_t(i + 1);
+    return value == wanted ? value + uint64_t(256) : value;
+}
+
+void fillUnrelated(SharcParameters p, uint64_t wanted) {
+    for (uint i = 0; i < 16; ++i) {
+        p.hashMapData.hashEntriesBuffer.data[i] = otherKey(i, wanted);
+    }
+    memoryBarrierBuffer();
+}
+
+void recordAccumulation(SharcParameters p, uint slot, uint outputOffset) {
+    memoryBarrierBuffer();
+    uvec4 value = p.accumulationBuffer.data[slot].data;
+    for (uint i = 0; i < 4; ++i) result[outputOffset + i] = value[i];
+}
+
+void main() {
+    SharcParameters p;
+    p.hashMapData.capacity = 16;
+    p.hashMapData.hashEntriesBuffer = RWStructuredBuffer_uint64_t(addresses.hashes);
+    p.accumulationBuffer = RWStructuredBuffer_SharcAccumulationData(addresses.accumulation);
+    p.resolvedBuffer = RWStructuredBuffer_SharcPackedData(addresses.resolved);
+    p.gridParameters.cameraPosition = vec3(0);
+    p.gridParameters.logarithmBase = SHARC_GRID_LOGARITHM_BASE;
+    p.gridParameters.sceneScale = 64;
+    p.gridParameters.levelBias = SHARC_GRID_LEVEL_BIAS;
+    p.radianceScale = 1000;
+    p.enableAntiFireflyFilter = false;
+    SharcHitData hit;
+    hit.positionWorld = vec3(1, 2, 3);
+    hit.normalWorld = vec3(0, 1, 0);
+    uint64_t key = HashGridComputeSpatialHash(hit.positionWorld, hit.normalWorld, p.gridParameters);
+    result[0] = 0x5090CAFEu;
+    result[22] = uint(key != uint64_t(HASH_GRID_INVALID_HASH_KEY));
+
+    // Capacity one forces a valid insertion and duplicate lookup into slot zero.
+    clearData(p);
+    p.hashMapData.capacity = 1;
+    result[1] = HashMapInsertEntry(p.hashMapData, hit.positionWorld, hit.normalWorld, p.gridParameters);
+    memoryBarrierBuffer();
+    result[2] = HashMapInsertEntry(p.hashMapData, hit.positionWorld, hit.normalWorld, p.gridParameters);
+
+    // Exhaust every probe without overwriting any of the occupied hash entries.
+    p.hashMapData.capacity = 16;
+    clearData(p);
+    fillUnrelated(p, key);
+    result[3] = HashMapInsertEntry(p.hashMapData, hit.positionWorld, hit.normalWorld, p.gridParameters);
+    memoryBarrierBuffer();
+    bool preserved = true;
+    for (uint i = 0; i < 16; ++i) preserved = preserved && p.hashMapData.hashEntriesBuffer.data[i] == otherKey(i, key);
+    result[4] = uint(preserved);
+    p.hashMapData.hashEntriesBuffer.data[13] = key;
+    memoryBarrierBuffer();
+    result[5] = HashMapInsertEntry(p.hashMapData, hit.positionWorld, hit.normalWorld, p.gridParameters);
+    fillUnrelated(p, key);
+    result[6] = HashMapFindEntry(p.hashMapData, hit.positionWorld, hit.normalWorld, p.gridParameters);
+
+    // A full cache must not deposit this hit's local radiance into unrelated slot zero.
+    clearData(p);
+    fillUnrelated(p, key);
+    SharcState state;
+    SharcInit(state);
+    result[7] = uint(SharcUpdateHit(p, state, hit, vec3(3, 4, 5), 0));
+    recordAccumulation(p, 0, 8);
+
+    // An earlier valid vertex still receives this hit and the subsequent miss.
+    // A bright resolved slot zero must not be mistaken for the failed allocation.
+    clearData(p);
+    fillUnrelated(p, key);
+    p.resolvedBuffer.data[0] = SharcPackVoxelData(vec3(7), 64, 1, 0, 0);
+    p.accumulationBuffer.data[7].data.w = 1;
+    memoryBarrierBuffer();
+    SharcInit(state);
+    state.pathLength = 1;
+    state.cacheIndices[0] = 7;
+    state.sampleWeights[0] = vec3(1);
+    bool continues = SharcUpdateHit(p, state, hit, vec3(3, 4, 5), 0);
+    result[12] = uint(continues);
+    if (continues) {
+        SharcSetThroughput(state, vec3(0.5, 0.25, 1));
+        SharcUpdateMiss(p, state, vec3(2, 4, 1));
+    }
+    recordAccumulation(p, 7, 13);
+    memoryBarrierBuffer();
+    result[21] = uint(all(equal(p.accumulationBuffer.data[0].data, uvec4(0))));
+
+    // Conversely, a real hit already stored at slot zero remains usable.
+    clearData(p);
+    fillUnrelated(p, key);
+    p.hashMapData.hashEntriesBuffer.data[0] = key;
+    memoryBarrierBuffer();
+    SharcInit(state);
+    SharcUpdateHit(p, state, hit, vec3(1, 0.5, 0.25), 0);
+    recordAccumulation(p, 0, 17);
+    result[23] = 0xC0DEC0DEu;
+}

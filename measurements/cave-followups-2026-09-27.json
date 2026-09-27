@@ -153,6 +153,7 @@
     "finding": "Allocation failure path exists and was exercised before the capture. The displayed failure total did not increase across this six-turn cave capture; no evidence here ties it to the reported rapid-turn spots.",
     "source_issue": "HashMapInsert sets cacheIndex=0 on allocation failure; HashMapInsertEntry ignores its false result and returns that unrelated slot. The ordinary invalid-index guards do not catch slot0. A targeted correctness fix remains to be implemented/tested.",
     "source_restored": true,
-    "diagnostic_installed": false
+    "diagnostic_installed": false,
+    "subsequent_correction": "Direct GPU test now reproduces the original bug and verifies the installed allocation guard; see sharc-overflow-2026-09-27.json. No demonstrated link to remaining turn spots."
   }
 }

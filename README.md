@@ -18,6 +18,8 @@ reproduction steps, and a correction to an invalid outdoor-walking comparison.
 The subsequent [frame scheduling fix](docs/frame-slots.md) substantially improves
 engine timing during rapid turns without changing shader quality. Rare long
 frames and physical display validation remain unresolved.
+The [cache-allocation correction](docs/sharc-overflow.md) fixes a separately
+reproduced GPU failure path; it does not establish a cure for the remaining spots.
 
 ## Results
 
@@ -141,7 +143,8 @@ frame (~7 ms) of extra input latency.
 
 ## What the patches do
 
-`patches/` holds two series for `git am`, pinned to Radiance `414d8e3` and MCVR `9905c81`.
+`patches/` holds two main series for `git am`, pinned to Radiance `414d8e3` and MCVR `9905c81`,
+plus a header correction applied inside MCVR's pinned SHaRC submodule.
 Details and measurements are in [docs/optimizations.md](docs/optimizations.md).
 
 | Patch | Effect |
@@ -157,6 +160,7 @@ Details and measurements are in [docs/optimizations.md](docs/optimizations.md).
 | mcvr/0011 | Give DLSS RR the same camera view as primary rays, including bobbing and hurt effects |
 | mcvr/0012 | Optional player block-light shadow switch; default on, can remove the camera player's cave silhouette |
 | mcvr/0013 | Separate two render-resource slots from acquired display images, avoiding needless fence serialization |
+| sharc/0001 | Preserve the invalid index when cache allocation fails, preventing unrelated slot-zero reads/writes |
 | radiance/0001 | Render thread: cheaper chunk rebuild queue, indexed block entities, smaller per-object buffers |
 | radiance/0002 | `LodBridge`: native chunk slots for LoD meshes after the vanilla grid |
 | radiance/0003 | No fluid walls facing unloaded chunks |
@@ -190,6 +194,8 @@ Built by [c-drew](https://github.com/c-drew) with Claude Code.
 
 ## License
 
-The patches modify GPL-3.0 code (Radiance, MCVR) and are GPL-3.0, as are the scripts and tools
-(see [LICENSE](LICENSE)). The documentation is [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+The main patch series modify GPL-3.0 code (Radiance, MCVR) and are GPL-3.0, as are the scripts
+and tools (see [LICENSE](LICENSE)). SHaRC retains its separate upstream license;
+see [patches/sharc/README.md](patches/sharc/README.md). The documentation is
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 Minecraft is a trademark of Mojang Studios; NVIDIA, RTX and DLSS are trademarks of NVIDIA.

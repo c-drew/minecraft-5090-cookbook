@@ -1,0 +1,25 @@
+Subject: [PATCH] Return the invalid SHaRC index when allocation fails
+
+Applies to SHaRC 1.6.5 at 0b9f58bbc8c41736042d4da964830a247e424a00.
+A failed insertion must not access unrelated slot zero or stop propagation
+to earlier valid vertices. Existing invalid-index guards handle the sentinel.
+
+This software contains source code provided by NVIDIA Corporation.
+SHaRC remains subject to its upstream NVIDIA RTX SDKs license; see README.md.
+
+diff --git a/include/HashGridCommon.h b/include/HashGridCommon.h
+index bb82326..cdcabe3 100644
+--- a/include/HashGridCommon.h
++++ b/include/HashGridCommon.h
+@@ -240,7 +240,10 @@ HashGridIndex HashMapInsertEntry(in HashMapData hashMapData, float3 samplePositi
+     const HashGridKey hashKey   = HashGridComputeSpatialHash(samplePosition, sampleNormal, gridParameters);
+     bool successful             = HashMapInsert(hashMapData, hashKey, cacheIndex);
+ 
+-    return cacheIndex;
++    // An exhausted probe window must not alias an unrelated entry at slot zero.
++    // Existing invalid-index guards skip that entry while preserving propagation
++    // to earlier valid vertices in the update path.
++    return successful ? cacheIndex : HASH_GRID_INVALID_CACHE_INDEX;
+ }
+ 
+ HashGridIndex HashMapFindEntry(in HashMapData hashMapData, float3 samplePosition, float3 sampleNormal, HashGridParameters gridParameters)

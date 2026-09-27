@@ -42,6 +42,7 @@ if [[ ${MCVR_CAVE_COUNTS:-0} == 1 ]]; then
     git -C "$work/MCVR" am -q "$root/patches/experimental/cave-counts/"*.patch
 fi
 git -C "$work/MCVR" submodule update --init --recursive --depth 1
+bash "$root/scripts/apply-sharc-patches.sh" "$work/MCVR"
 
 # JNI headers for the engine build.
 (cd "$work/Radiance" && ./gradlew --quiet compileJava)

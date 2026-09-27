@@ -443,7 +443,9 @@ source error: failed insertion returns slot 0, and its caller ignores the
 failure flag, allowing an unrelated cache entry to be used. The observation
 does not link that failure path to the rapid-turn spots. The settled binary
 overlay is an observation through RR/tone mapping, not raw buffer readback;
-a targeted overflow correctness test and fix remain outstanding. The overlay
+a later [direct GPU test reproduces the defect and verifies a targeted fix](sharc-overflow.md).
+That correction retains comparable cave convergence and does not establish a
+cause for the remaining rapid-turn spots. The overlay
 also makes this run unsuitable for convergence or performance scoring.
 [Optional diagnostic patches and activation checks](../diagnostics/cave-followups/README.md)
 are kept outside the production series.

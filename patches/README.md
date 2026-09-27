@@ -1,6 +1,6 @@
 # Patches
 
-Two series for `git am`, applied by `scripts/build.sh`:
+Two main series for `git am`, applied by `scripts/build.sh`:
 
 | Directory | Upstream | Base commit |
 |---|---|---|
@@ -9,8 +9,10 @@ Two series for `git am`, applied by `scripts/build.sh`:
 
 `mcvr/0001`–`0003` are the commits (made with GitHub Copilot) from AlexRice13's fork
 [AlexRice13/MCVR](https://github.com/AlexRice13/MCVR), unchanged. Everything else is described in
-[../docs/optimizations.md](../docs/optimizations.md). All patches are GPL-3.0, like the code they
-modify.
+[../docs/optimizations.md](../docs/optimizations.md). These main-series patches
+are GPL-3.0, like the code they modify. The separate [SHaRC header patch](sharc/README.md)
+applies with `git apply` inside the pinned submodule after initialization;
+SHaRC retains its upstream license.
 
 `mcvr/0011` fixes the view matrix passed to DLSS Ray Reconstruction. `0012` adds
 `player_block_light_shadows` (default true); setting it false omits only the camera player's
@@ -33,4 +35,6 @@ By hand:
 ```sh
 git -C MCVR checkout 9905c81 && git -C MCVR am /path/to/patches/mcvr/*.patch
 git -C Radiance checkout 414d8e3 && git -C Radiance am /path/to/patches/radiance/*.patch
+git -C MCVR submodule update --init --recursive --depth 1
+bash scripts/apply-sharc-patches.sh /path/to/MCVR
 ```

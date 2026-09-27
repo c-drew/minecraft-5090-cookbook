@@ -5,7 +5,8 @@ rapid cave turns. The tested release is installed locally. It changes native
 frame scheduling, while preserving the preceding sampling/cache fixes, lighting,
 materials, resolution, four bounces and SHaRC. Fine post-turn noise and occasional
 long frames remain. A strict 144 FPS floor and physical fullscreen delivery are
-still unverified.
+still unverified. The later [SHaRC allocation correction](sharc-overflow.md)
+retains this native binary and has separate exact-jar regression measurements.
 
 ## Cause and correction
 
@@ -133,7 +134,8 @@ extension, turn-reset diagnostic, or frame-slot-switch environment strings.
 It changes only the native jar entry; no production source behavior or quality
 setting changed. The source patch series is unchanged.
 
-The corrected `7ce983fd…` jar was independently playtested and is now installed.
+The corrected `7ce983fd…` jar was independently playtested and installed, then
+superseded by the shader-only SHaRC allocation correction linked above.
 Both cave intervals again included ten fast turns; both forest intervals traveled
 a verified 190.81 blocks. These results are separate from the initial release:
 
@@ -169,7 +171,7 @@ cleanly. The resulting framework files match the built release sources, and all
 The optional cave profile is still needed for the shader fixes described in
 [cave-artifacts.md](cave-artifacts.md).
 
-Installed recompiled jar SHA256:
+Recompiled jar SHA256, before the later SHaRC header correction:
 `7ce983fd0d1276302e22f6f6d0b13e4a08f3f97bd0ceae67ceaafc3afcfa300b`.
 Native SHA256:
 `7ae07e54c58042e4539cc43656fb03c396b8ede54a9ce69a9161e6fda41bd1a1`.
