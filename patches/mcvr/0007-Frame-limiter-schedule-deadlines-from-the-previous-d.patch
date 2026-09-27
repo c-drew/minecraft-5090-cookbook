@@ -1,0 +1,36 @@
+From 69f620b75061cc9f5d123c55db3b1adb6199f677 Mon Sep 17 00:00:00 2001
+From: c-drew <101952850+c-drew@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 23:13:13 -0400
+Subject: [PATCH 07/10] Frame limiter: schedule deadlines from the previous
+ deadline
+
+After sleeping, the limiter re-anchored on the actual wake-up time, so every oversleep carried
+into the next frame and a 140 fps cap ran at ~138.9 fps. The next deadline is now one period
+after the previous one; a late frame still re-anchors on now() without catch-up. Measured with
+maxFps=140: 138.92 -> 140.01 fps.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_014aGN7pt3GAnXQRSSREgQzx
+---
+ src/core/render/render_framework.cpp | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/core/render/render_framework.cpp b/src/core/render/render_framework.cpp
+index 00ef7fc..01fb23b 100644
+--- a/src/core/render/render_framework.cpp
++++ b/src/core/render/render_framework.cpp
+@@ -404,10 +404,13 @@ void Framework::limitFrameRate() {
+         frameLimitFps_ = fpsLimit;
+     }
+ 
++    // RTX 5090 fork: the next deadline is one period after this one, not after the actual wake-up,
++    // so sleep overshoot does not accumulate (re-anchoring on now() ran a 140 cap at ~137 fps).
++    // A late frame re-anchors on now() and gets no catch-up.
+     const auto target = frameLimitAnchor_ + frameDuration;
+     if (now < target) {
+         std::this_thread::sleep_until(target);
+-        frameLimitAnchor_ = std::chrono::steady_clock::now();
++        frameLimitAnchor_ = target;
+     } else {
+         frameLimitAnchor_ = now;
+     }

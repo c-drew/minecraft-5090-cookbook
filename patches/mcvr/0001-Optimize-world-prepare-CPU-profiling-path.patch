@@ -1,0 +1,1670 @@
+From 1ffae5bf27d17f47f32b623d42ce9d61d8c990f5 Mon Sep 17 00:00:00 2001
+From: Copilot <copilot@radiance.mod>
+Date: Mon, 11 May 2026 21:47:32 +0800
+Subject: [PATCH 01/10] Optimize world prepare CPU profiling path
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+---
+ src/common/hit_group_registry.hpp             |  59 ++++
+ src/common/profiler.cpp                       | 297 ++++++++++++++++++
+ src/common/profiler.hpp                       | 133 ++++++++
+ src/core/CMakeLists.txt                       |  12 +
+ src/core/render/chunks.cpp                    | 131 +++++---
+ src/core/render/chunks.hpp                    |   4 +
+ src/core/render/entities.cpp                  |  13 +-
+ src/core/render/entities.hpp                  |   3 +
+ .../ray_tracing/submodules/world_prepare.cpp  | 186 +++++++----
+ .../ray_tracing/submodules/world_prepare.hpp  |  27 +-
+ .../render/modules/world/svgf/blue_noise.cpp  |  35 ++-
+ src/core/render/render_framework.cpp          |  94 ++++--
+ src/core/vulkan/sbt.cpp                       |  70 +++--
+ src/core/vulkan/sbt.hpp                       |   1 +
+ 14 files changed, 897 insertions(+), 168 deletions(-)
+ create mode 100644 src/common/hit_group_registry.hpp
+ create mode 100644 src/common/profiler.cpp
+ create mode 100644 src/common/profiler.hpp
+
+diff --git a/src/common/hit_group_registry.hpp b/src/common/hit_group_registry.hpp
+new file mode 100644
+index 0000000..5b36b8e
+--- /dev/null
++++ b/src/common/hit_group_registry.hpp
+@@ -0,0 +1,59 @@
++#pragma once
++
++#include <cstdint>
++#include <mutex>
++#include <string>
++#include <unordered_map>
++#include <vector>
++
++namespace mcvr {
++
++class HitGroupRegistry {
++  public:
++    static uint32_t registerName(const std::string &name) {
++        auto &state = registryState();
++        std::lock_guard lock(state.mutex);
++        auto iter = state.nameToId.find(name);
++        if (iter != state.nameToId.end()) { return iter->second; }
++
++        const uint32_t id = static_cast<uint32_t>(state.names.size());
++        state.names.push_back(name);
++        state.nameToId.emplace(state.names.back(), id);
++        return id;
++    }
++
++    static uint32_t shadowId() {
++        static const uint32_t id = registerName("shadow");
++        return id;
++    }
++
++    static uint32_t defaultId() {
++        static const uint32_t id = registerName("default");
++        return id;
++    }
++
++    static uint32_t entityDefaultId() {
++        static const uint32_t id = registerName("Entity");
++        return id;
++    }
++
++    static std::vector<std::string> namesSnapshot() {
++        auto &state = registryState();
++        std::lock_guard lock(state.mutex);
++        return state.names;
++    }
++
++  private:
++    struct State {
++        std::mutex mutex;
++        std::unordered_map<std::string, uint32_t> nameToId;
++        std::vector<std::string> names;
++    };
++
++    static State &registryState() {
++        static State state;
++        return state;
++    }
++};
++
++} // namespace mcvr
+diff --git a/src/common/profiler.cpp b/src/common/profiler.cpp
+new file mode 100644
+index 0000000..b74ba04
+--- /dev/null
++++ b/src/common/profiler.cpp
+@@ -0,0 +1,297 @@
++#include "common/profiler.hpp"
++
++#if RADIANCE_PROFILER_ENABLED
++
++#include <algorithm>
++#include <array>
++#include <chrono>
++#include <cstring>
++#include <limits>
++#include <mutex>
++
++#if defined(_WIN32)
++#    ifndef WIN32_LEAN_AND_MEAN
++#        define WIN32_LEAN_AND_MEAN
++#    endif
++#    ifndef NOMINMAX
++#        define NOMINMAX
++#    endif
++#    include <Windows.h>
++#endif
++
++namespace mcvr::profiler {
++
++std::atomic_bool Profiler::enabled{false};
++
++namespace {
++
++constexpr uint32_t kMaxZoneNames = 2048;
++constexpr uint32_t kMaxThreadEvents = 32768;
++constexpr uint32_t kDefaultAggregationFrameInterval = 30;
++
++struct ZoneEvent {
++    uint32_t nameId = 0;
++    uint64_t beginTicks = 0;
++    uint64_t endTicks = 0;
++};
++
++struct AggregatedZone {
++    uint64_t callCount = 0;
++    uint64_t totalTicks = 0;
++    uint64_t minTicks = std::numeric_limits<uint64_t>::max();
++    uint64_t maxTicks = 0;
++};
++
++struct NameRegistry {
++    std::mutex mutex;
++    std::array<const char *, kMaxZoneNames> names{};
++    uint32_t count = 0;
++};
++
++struct AggregateRegistry {
++    std::mutex mutex;
++    std::array<AggregatedZone, kMaxZoneNames> zones{};
++    std::array<uint64_t, kMaxZoneNames> counters{};
++    std::array<bool, kMaxZoneNames> counterSet{};
++    uint64_t droppedEvents = 0;
++};
++
++struct ThreadState {
++    std::array<ZoneEvent, kMaxThreadEvents> events{};
++    uint32_t eventCount = 0;
++    uint64_t droppedEvents = 0;
++    uint32_t framesSinceFlush = 0;
++    bool active = false;
++
++    ~ThreadState();
++};
++
++std::atomic_uint64_t gFrameId{0};
++std::atomic_uint32_t gAggregationFrameInterval{kDefaultAggregationFrameInterval};
++
++NameRegistry &nameRegistry() {
++    static auto *registry = new NameRegistry();
++    return *registry;
++}
++
++AggregateRegistry &aggregateRegistry() {
++    static auto *registry = new AggregateRegistry();
++    return *registry;
++}
++
++ThreadState &threadState() {
++    thread_local ThreadState state;
++    return state;
++}
++
++uint64_t readTicks() noexcept {
++#if defined(_WIN32)
++    LARGE_INTEGER value{};
++    QueryPerformanceCounter(&value);
++    return static_cast<uint64_t>(value.QuadPart);
++#else
++    return static_cast<uint64_t>(
++        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
++            .count());
++#endif
++}
++
++uint64_t ticksFrequency() noexcept {
++#if defined(_WIN32)
++    static const uint64_t frequency = [] {
++        LARGE_INTEGER value{};
++        QueryPerformanceFrequency(&value);
++        return static_cast<uint64_t>(value.QuadPart);
++    }();
++    return frequency;
++#else
++    return 1000000000ull;
++#endif
++}
++
++uint32_t registerName(const char *name) {
++    if (name == nullptr) { name = "<null>"; }
++
++    auto &registry = nameRegistry();
++    std::lock_guard lock(registry.mutex);
++
++    for (uint32_t i = 0; i < registry.count; ++i) {
++        if (std::strcmp(registry.names[i], name) == 0) { return i; }
++    }
++
++    if (registry.count >= kMaxZoneNames) { return kMaxZoneNames - 1; }
++
++    const uint32_t id = registry.count++;
++    registry.names[id] = name;
++    return id;
++}
++
++void recordEvent(ThreadState &state, uint32_t nameId, uint64_t beginTicks, uint64_t endTicks) noexcept {
++    if (state.eventCount >= kMaxThreadEvents) {
++        ++state.droppedEvents;
++        return;
++    }
++
++    state.events[state.eventCount++] = ZoneEvent{
++        .nameId = nameId,
++        .beginTicks = beginTicks,
++        .endTicks = endTicks,
++    };
++}
++
++void flushThread(ThreadState &state) {
++    if (state.eventCount == 0 && state.droppedEvents == 0) { return; }
++
++    auto &aggregate = aggregateRegistry();
++    std::lock_guard lock(aggregate.mutex);
++
++    for (uint32_t i = 0; i < state.eventCount; ++i) {
++        const ZoneEvent &event = state.events[i];
++        const uint64_t elapsed = event.endTicks >= event.beginTicks ? event.endTicks - event.beginTicks : 0;
++        AggregatedZone &zone = aggregate.zones[event.nameId];
++        ++zone.callCount;
++        zone.totalTicks += elapsed;
++        zone.minTicks = std::min(zone.minTicks, elapsed);
++        zone.maxTicks = std::max(zone.maxTicks, elapsed);
++    }
++
++    aggregate.droppedEvents += state.droppedEvents;
++    state.eventCount = 0;
++    state.droppedEvents = 0;
++}
++
++ThreadState::~ThreadState() {
++    flushThread(*this);
++}
++
++} // namespace
++
++void Profiler::setEnabled(bool value) noexcept {
++    enabled.store(value, std::memory_order_relaxed);
++}
++
++bool Profiler::isEnabled() noexcept {
++    return enabled.load(std::memory_order_relaxed);
++}
++
++void Profiler::refreshCurrentThread() noexcept {
++    threadState().active = enabled.load(std::memory_order_relaxed);
++}
++
++void Profiler::beginFrame() noexcept {
++    ThreadState &state = threadState();
++    state.active = enabled.load(std::memory_order_relaxed);
++    gFrameId.fetch_add(1, std::memory_order_relaxed);
++
++    const uint32_t interval = std::max(1u, gAggregationFrameInterval.load(std::memory_order_relaxed));
++    if (++state.framesSinceFlush >= interval) {
++        state.framesSinceFlush = 0;
++        flushThread(state);
++    }
++}
++
++void Profiler::endFrame() noexcept {}
++
++void Profiler::flushCurrentThread() {
++    flushThread(threadState());
++}
++
++void Profiler::reset() {
++    flushCurrentThread();
++
++    auto &aggregate = aggregateRegistry();
++    std::lock_guard lock(aggregate.mutex);
++    aggregate.zones = {};
++    aggregate.counters = {};
++    aggregate.counterSet = {};
++    aggregate.droppedEvents = 0;
++}
++
++ProfilerSnapshot Profiler::snapshot() {
++    ProfilerSnapshot snapshot;
++    snapshot.frameId = frameId();
++
++    auto &aggregate = aggregateRegistry();
++    auto &names = nameRegistry();
++    std::scoped_lock lock(aggregate.mutex, names.mutex);
++
++    snapshot.droppedEvents = aggregate.droppedEvents;
++    snapshot.zones.reserve(names.count);
++
++    for (uint32_t i = 0; i < names.count; ++i) {
++        const AggregatedZone &zone = aggregate.zones[i];
++        const char *name = names.names[i] != nullptr ? names.names[i] : "<unknown>";
++        if (zone.callCount != 0) {
++            const double totalMs = ticksToMilliseconds(zone.totalTicks);
++            snapshot.zones.push_back(ZoneStats{
++                .name = name,
++                .callCount = zone.callCount,
++                .totalTicks = zone.totalTicks,
++                .minTicks = zone.minTicks,
++                .maxTicks = zone.maxTicks,
++                .totalMilliseconds = totalMs,
++                .averageMilliseconds = totalMs / static_cast<double>(zone.callCount),
++            });
++        }
++        if (aggregate.counterSet[i]) {
++            snapshot.counters.push_back(CounterStats{
++                .name = name,
++                .value = aggregate.counters[i],
++            });
++        }
++    }
++
++    std::sort(snapshot.zones.begin(), snapshot.zones.end(), [](const ZoneStats &lhs, const ZoneStats &rhs) {
++        return lhs.totalTicks > rhs.totalTicks;
++    });
++    return snapshot;
++}
++
++void Profiler::setCounter(const char *name, uint64_t value) {
++    if (!enabled.load(std::memory_order_relaxed)) { return; }
++
++    const uint32_t nameId = registerName(name);
++    auto &aggregate = aggregateRegistry();
++    std::lock_guard lock(aggregate.mutex);
++    aggregate.counters[nameId] = value;
++    aggregate.counterSet[nameId] = true;
++}
++
++uint64_t Profiler::frameId() noexcept {
++    return gFrameId.load(std::memory_order_relaxed);
++}
++
++void Profiler::setAggregationFrameInterval(uint32_t frames) noexcept {
++    gAggregationFrameInterval.store(std::max(1u, frames), std::memory_order_relaxed);
++}
++
++double Profiler::ticksToMilliseconds(uint64_t ticks) noexcept {
++    return (static_cast<double>(ticks) * 1000.0) / static_cast<double>(ticksFrequency());
++}
++
++ScopedZone::ScopedZone(const char *name) {
++    ThreadState &state = threadState();
++    if (!state.active) { return; }
++
++    nameId_ = registerName(name);
++    beginTicks_ = readTicks();
++    active_ = true;
++}
++
++ScopedZone::~ScopedZone() {
++    if (!active_) { return; }
++
++    recordEvent(threadState(), nameId_, beginTicks_, readTicks());
++}
++
++FrameScope::FrameScope() noexcept {
++    Profiler::beginFrame();
++}
++
++FrameScope::~FrameScope() noexcept {
++    Profiler::endFrame();
++}
++
++} // namespace mcvr::profiler
++
++#endif
+diff --git a/src/common/profiler.hpp b/src/common/profiler.hpp
+new file mode 100644
+index 0000000..dcf927b
+--- /dev/null
++++ b/src/common/profiler.hpp
+@@ -0,0 +1,133 @@
++#pragma once
++
++#ifndef RADIANCE_PROFILER_ENABLED
++#    define RADIANCE_PROFILER_ENABLED 1
++#endif
++
++#include <atomic>
++#include <cstdint>
++#include <string>
++#include <vector>
++
++namespace mcvr::profiler {
++
++struct ZoneStats {
++    std::string name;
++    uint64_t callCount = 0;
++    uint64_t totalTicks = 0;
++    uint64_t minTicks = 0;
++    uint64_t maxTicks = 0;
++    double totalMilliseconds = 0.0;
++    double averageMilliseconds = 0.0;
++};
++
++struct CounterStats {
++    std::string name;
++    uint64_t value = 0;
++};
++
++struct ProfilerSnapshot {
++    uint64_t frameId = 0;
++    uint64_t droppedEvents = 0;
++    std::vector<ZoneStats> zones;
++    std::vector<CounterStats> counters;
++};
++
++#if RADIANCE_PROFILER_ENABLED
++
++class Profiler {
++  public:
++    static std::atomic_bool enabled;
++
++    static void setEnabled(bool value) noexcept;
++    static bool isEnabled() noexcept;
++    static void refreshCurrentThread() noexcept;
++    static void beginFrame() noexcept;
++    static void endFrame() noexcept;
++    static void flushCurrentThread();
++    static void reset();
++    static ProfilerSnapshot snapshot();
++    static void setCounter(const char *name, uint64_t value);
++    static uint64_t frameId() noexcept;
++    static void setAggregationFrameInterval(uint32_t frames) noexcept;
++    static double ticksToMilliseconds(uint64_t ticks) noexcept;
++};
++
++class ScopedZone {
++  public:
++    explicit ScopedZone(const char *name);
++    ~ScopedZone();
++
++    ScopedZone(const ScopedZone &) = delete;
++    ScopedZone &operator=(const ScopedZone &) = delete;
++    ScopedZone(ScopedZone &&) = delete;
++    ScopedZone &operator=(ScopedZone &&) = delete;
++
++  private:
++    uint32_t nameId_ = 0;
++    uint64_t beginTicks_ = 0;
++    bool active_ = false;
++};
++
++class FrameScope {
++  public:
++    FrameScope() noexcept;
++    ~FrameScope() noexcept;
++
++    FrameScope(const FrameScope &) = delete;
++    FrameScope &operator=(const FrameScope &) = delete;
++    FrameScope(FrameScope &&) = delete;
++    FrameScope &operator=(FrameScope &&) = delete;
++};
++
++#else
++
++class Profiler {
++  public:
++    inline static std::atomic_bool enabled{false};
++
++    static void setEnabled(bool) noexcept {}
++    static bool isEnabled() noexcept { return false; }
++    static void refreshCurrentThread() noexcept {}
++    static void beginFrame() noexcept {}
++    static void endFrame() noexcept {}
++    static void flushCurrentThread() {}
++    static void reset() {}
++    static ProfilerSnapshot snapshot() { return {}; }
++    static void setCounter(const char *, uint64_t) {}
++    static uint64_t frameId() noexcept { return 0; }
++    static void setAggregationFrameInterval(uint32_t) noexcept {}
++    static double ticksToMilliseconds(uint64_t) noexcept { return 0.0; }
++};
++
++class ScopedZone {
++  public:
++    explicit ScopedZone(const char *) noexcept {}
++};
++
++class FrameScope {
++  public:
++    FrameScope() noexcept {}
++    ~FrameScope() noexcept {}
++};
++
++#endif
++
++} // namespace mcvr::profiler
++
++#define RAD_PROFILE_CONCAT_IMPL(a, b) a##b
++#define RAD_PROFILE_CONCAT(a, b) RAD_PROFILE_CONCAT_IMPL(a, b)
++
++#if RADIANCE_PROFILER_ENABLED
++#    define RAD_PROFILE_THREAD() ::mcvr::profiler::Profiler::refreshCurrentThread()
++#    define RAD_PROFILE_COUNTER(name, value) ::mcvr::profiler::Profiler::setCounter(name, static_cast<uint64_t>(value))
++#    define RAD_PROFILE_SCOPE(name)                                                                                    \
++        ::mcvr::profiler::ScopedZone RAD_PROFILE_CONCAT(__rad_profile_scope_, __LINE__)(name)
++#    define RAD_PROFILE_FRAME()                                                                                        \
++        ::mcvr::profiler::FrameScope RAD_PROFILE_CONCAT(__rad_profile_frame_, __LINE__)
++#else
++#    define RAD_PROFILE_THREAD() ((void)0)
++#    define RAD_PROFILE_COUNTER(name, value) ((void)0)
++#    define RAD_PROFILE_SCOPE(name) ((void)0)
++#    define RAD_PROFILE_FRAME() ((void)0)
++#endif
+diff --git a/src/core/CMakeLists.txt b/src/core/CMakeLists.txt
+index 61b9eeb..17fafb4 100644
+--- a/src/core/CMakeLists.txt
++++ b/src/core/CMakeLists.txt
+@@ -1,9 +1,13 @@
+ file(GLOB_RECURSE SOURCE_FILES CONFIGURE_DEPENDS "*.cpp")
+ 
+ add_library(core SHARED ${SOURCE_FILES})
++target_sources(core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../common/profiler.cpp")
+ target_link_libraries(core PUBLIC ngx ${JNI_LIBRARIES} VulkanMemoryAllocator volk::volk glfw minizip tinyexpr
+                                    nlohmann_json::nlohmann_json)
+ 
++option(MCVR_ENABLE_SHADER_INVOCATION_REORDER_GLSL "Enable GLSL NV shader invocation reorder emission" ON)
++option(RADIANCE_PROFILER_ENABLED "Enable Radiance native CPU profiler instrumentation" ON)
++
+ if(DEFINED ENV{VULKAN_SDK} AND NOT "$ENV{VULKAN_SDK}" STREQUAL "")
+     set(MCVR_VULKAN_SDK "$ENV{VULKAN_SDK}")
+ else()
+@@ -29,6 +33,14 @@ endif()
+ target_include_directories(core PUBLIC ${GENTOOL_OUTPUT_DIR} ${VOLK_INCLUDE_DIR} ${GLFW_INCLUDE_DIR} ${VMA_INCLUDE_DIR} ${STB_INCLUDE_DIR} ${TINYEXPR_INCLUDE_DIR} ${JNI_INCLUDE_DIRS} ${GLM_INCLUDE_DIR} ${SHADERC_INCLUDE_DIR})
+ target_link_libraries(core PUBLIC ${SHADERC_LIBRARY})
+ target_compile_definitions(core PUBLIC VK_NO_PROTOTYPES CORE_LIB)
++if(RADIANCE_PROFILER_ENABLED)
++    target_compile_definitions(core PUBLIC RADIANCE_PROFILER_ENABLED=1)
++else()
++    target_compile_definitions(core PUBLIC RADIANCE_PROFILER_ENABLED=0)
++endif()
++if(MCVR_ENABLE_SHADER_INVOCATION_REORDER_GLSL)
++    target_compile_definitions(core PUBLIC MCVR_ENABLE_SHADER_INVOCATION_REORDER_GLSL)
++endif()
+ if(USE_AMD)
+     target_compile_definitions(core PUBLIC USE_AMD)
+ endif()
+diff --git a/src/core/render/chunks.cpp b/src/core/render/chunks.cpp
+index 38753a4..04fe386 100644
+--- a/src/core/render/chunks.cpp
++++ b/src/core/render/chunks.cpp
+@@ -1,5 +1,7 @@
+ #include "core/render/chunks.hpp"
+ 
++#include "common/hit_group_registry.hpp"
++#include "common/profiler.hpp"
+ #include "core/render/buffers.hpp"
+ #include "core/render/render_framework.hpp"
+ #include "core/render/renderer.hpp"
+@@ -304,6 +306,7 @@ ChunkBuildData::ChunkBuildData(int64_t id,
+                                uint32_t geometryCount,
+                                std::vector<World::GeometryTypes> &&geometryTypes,
+                                std::vector<std::string> &&geometryGroupNames,
++                               std::vector<uint32_t> &&geometryGroupIds,
+                                std::vector<std::vector<vk::VertexFormat::PBRVertex>> &&vertices,
+                                std::vector<std::vector<uint32_t>> &&indices)
+     : id(id),
+@@ -317,6 +320,7 @@ ChunkBuildData::ChunkBuildData(int64_t id,
+       geometryCount(geometryCount),
+       geometryTypes(std::move(geometryTypes)),
+       geometryGroupNames(std::move(geometryGroupNames)),
++      geometryGroupIds(std::move(geometryGroupIds)),
+       vertices(std::move(vertices)),
+       indices(std::move(indices)),
+       indexBufferAddresses(),
+@@ -804,6 +808,7 @@ ChunkBuildScheduler::ChunkBuildScheduler(std::set<int64_t> &queuedIndex,
+ }
+ 
+ void ChunkBuildScheduler::tryCheckBatchesFinish() {
++    RAD_PROFILE_SCOPE("chunk_scheduler.try_check_batches_finish");
+     auto framework = Renderer::instance().framework();
+     auto device = framework->device();
+ 
+@@ -891,12 +896,14 @@ void ChunkBuildScheduler::waitAllBatchesFinish() {
+ 
+ void ChunkBuildScheduler::tryScheduleBatches(uint32_t maxBatchSize) {
+     if (!Renderer::instance().framework()->isRunning()) return;
++    RAD_PROFILE_SCOPE("chunk_scheduler.try_schedule_batches");
+     while (true) {
+         std::shared_ptr<vk::Fence> fence;
+         std::shared_ptr<vk::CommandBuffer> commandBuffer;
+         std::shared_ptr<ChunkBuildDataBatch> chunkBuildDataBatch;
+ 
+         {
++            RAD_PROFILE_SCOPE("chunk_scheduler.select_batch");
+             std::unique_lock<std::recursive_mutex> lock(mutex_);
+             if (freeFences_.empty() || freeCommandBuffers_.empty()) { return; }
+ 
+@@ -929,7 +936,10 @@ void ChunkBuildScheduler::tryScheduleBatches(uint32_t maxBatchSize) {
+             pendingBatchFrames_ = 0;
+         }
+ 
+-        chunkBuildDataBatch->build();
++        {
++            RAD_PROFILE_SCOPE("chunk_scheduler.batch_build");
++            chunkBuildDataBatch->build();
++        }
+ 
+         bool hasLightUploads = false;
+         for (const auto &chunkBuildData : chunkBuildDataBatch->batchData) {
+@@ -963,15 +973,18 @@ void ChunkBuildScheduler::tryScheduleBatches(uint32_t maxBatchSize) {
+         const auto queueFamilyIndex =
+             useSecondaryQueue_ ? physicalDevice->secondaryQueueIndex() : physicalDevice->mainQueueIndex();
+ 
+-        commandBuffer->begin();
+-        if (chunkBuildDataBatch->positionBuffer != nullptr) {
+-            chunkBuildDataBatch->indexBuffer->uploadToBuffer(commandBuffer);
+-            chunkBuildDataBatch->positionBuffer->uploadToBuffer(commandBuffer);
+-            chunkBuildDataBatch->materialBuffer->uploadToBuffer(commandBuffer);
+-        }
+-        for (const auto &chunkBuildData : chunkBuildDataBatch->batchData) {
+-            if (chunkBuildData->lightBuffer != nullptr) {
+-                chunkBuildData->lightBuffer->uploadToBuffer(commandBuffer);
++        {
++            RAD_PROFILE_SCOPE("chunk_scheduler.record_uploads");
++            commandBuffer->begin();
++            if (chunkBuildDataBatch->positionBuffer != nullptr) {
++                chunkBuildDataBatch->indexBuffer->uploadToBuffer(commandBuffer);
++                chunkBuildDataBatch->positionBuffer->uploadToBuffer(commandBuffer);
++                chunkBuildDataBatch->materialBuffer->uploadToBuffer(commandBuffer);
++            }
++            for (const auto &chunkBuildData : chunkBuildDataBatch->batchData) {
++                if (chunkBuildData->lightBuffer != nullptr) {
++                    chunkBuildData->lightBuffer->uploadToBuffer(commandBuffer);
++                }
+             }
+         }
+ 
+@@ -1032,6 +1045,7 @@ void ChunkBuildScheduler::tryScheduleBatches(uint32_t maxBatchSize) {
+         }
+ 
+         if (chunkBuildDataBatch->blasBatchBuilder != nullptr) {
++            RAD_PROFILE_SCOPE("chunk_scheduler.record_blas_submit");
+             chunkBuildDataBatch->blasBatchBuilder->submit(commandBuffer);
+         }
+         commandBuffer->end();
+@@ -1041,10 +1055,13 @@ void ChunkBuildScheduler::tryScheduleBatches(uint32_t maxBatchSize) {
+         vkSubmitInfo.commandBufferCount = 1;
+         vkSubmitInfo.pCommandBuffers = &commandBuffer->vkCommandBuffer();
+ 
+-        if (useSecondaryQueue_) {
+-            vkQueueSubmit(device->secondaryQueue(), 1, &vkSubmitInfo, fence->vkFence());
+-        } else {
+-            vkQueueSubmit(device->mainVkQueue(), 1, &vkSubmitInfo, fence->vkFence());
++        {
++            RAD_PROFILE_SCOPE("chunk_scheduler.queue_submit");
++            if (useSecondaryQueue_) {
++                vkQueueSubmit(device->secondaryQueue(), 1, &vkSubmitInfo, fence->vkFence());
++            } else {
++                vkQueueSubmit(device->mainVkQueue(), 1, &vkSubmitInfo, fence->vkFence());
++            }
+         }
+ 
+         std::unique_lock<std::recursive_mutex> lock(mutex_);
+@@ -1121,6 +1138,9 @@ bool Chunk1::enqueue(std::shared_ptr<ChunkBuildData> chunkBuildData) {
+ 
+         frr.retain(geometryGroupNames);
+         geometryGroupNames = std::make_shared<std::vector<std::string>>(std::move(chunkBuildData->geometryGroupNames));
++
++        frr.retain(geometryGroupIds);
++        geometryGroupIds = std::make_shared<std::vector<uint32_t>>(std::move(chunkBuildData->geometryGroupIds));
+         return true;
+     } else {
+         frr.retain(chunkBuildData->blas);
+@@ -1172,6 +1192,9 @@ void Chunk1::invalidate() {
+ 
+     frr.retain(geometryGroupNames);
+     geometryGroupNames = nullptr;
++
++    frr.retain(geometryGroupIds);
++    geometryGroupIds = nullptr;
+ }
+ 
+ void Chunk1::retainResources(FrameResourceRetainer &frr) {
+@@ -1184,6 +1207,7 @@ void Chunk1::retainResources(FrameResourceRetainer &frr) {
+     frr.retain(materialBuffer);
+     frr.retain(lightInfos);
+     frr.retain(lightBuffer);
++    frr.retain(geometryGroupIds);
+ }
+ 
+ void Chunk1::releaseEmissionResources(FrameResourceRetainer &frr) {
+@@ -1213,6 +1237,7 @@ std::shared_ptr<ChunkRenderData> Chunk1::tryGetValid() {
+     ret->lightCount = lightCount;
+     ret->geometryCount = geometryCount;
+     ret->geometryGroupNames = geometryGroupNames;
++    ret->geometryGroupIds = geometryGroupIds;
+ 
+     return ret;
+ }
+@@ -1359,6 +1384,7 @@ void Chunks::setCollectChunkEmission(bool collect) {
+ }
+ 
+ void Chunks::resetFrame() {
++    RAD_PROFILE_SCOPE("chunks.reset_frame");
+     auto context = Renderer::instance().framework()->safeAcquireCurrentContext();
+     std::unique_lock<std::recursive_mutex> lock(mutex_);
+     auto framework = Renderer::instance().framework();
+@@ -1371,6 +1397,7 @@ void Chunks::resetFrame() {
+         context->frameIndex < chunkPackedDataBuffers_.size()) {
+         auto &chunkPackedDataBuffer = chunkPackedDataBuffers_[context->frameIndex];
+         if (chunkPackedDataBuffer != nullptr) {
++            RAD_PROFILE_SCOPE("chunks.upload_packed_data");
+             const size_t chunkPackedDataBytes = chunkPackedData_.size() * sizeof(ChunkPackedData);
+             chunkPackedDataBuffer->uploadToStagingBuffer(chunkPackedData_.data(), chunkPackedDataBytes, 0);
+             Renderer::instance().buffers()->queueImportantWorldUpload(chunkPackedDataBuffer);
+@@ -1412,45 +1439,52 @@ void Chunks::relocateChunk(int id, int x, int y, int z) {
+ }
+ 
+ void Chunks::queueChunkBuild(ChunkBuildTask task) {
++    RAD_PROFILE_THREAD();
++    RAD_PROFILE_SCOPE("chunks.queue_chunk_build");
+     uint32_t allVertexCount = 0, allIndexCount = 0;
+     std::vector<World::GeometryTypes> geometryTypes;
+     std::vector<std::string> geometryGroupNames;
++    std::vector<uint32_t> geometryGroupIds;
+     std::vector<std::vector<vk::VertexFormat::PBRVertex>> vertices;
+     std::vector<std::vector<uint32_t>> indices;
+ 
+-    for (int i = 0; i < task.geometryCount; i++) {
+-        World::GeometryTypes geometryType = static_cast<World::GeometryTypes>(task.geometryTypes[i]);
+-        auto &geometryVertices = vertices.emplace_back();
+-        auto &geometryIndices = indices.emplace_back();
++    {
++        RAD_PROFILE_SCOPE("chunks.queue_chunk_build.copy_geometry");
++        for (int i = 0; i < task.geometryCount; i++) {
++            World::GeometryTypes geometryType = static_cast<World::GeometryTypes>(task.geometryTypes[i]);
++            auto &geometryVertices = vertices.emplace_back();
++            auto &geometryIndices = indices.emplace_back();
+ 
+-        geometryVertices.resize(task.vertexCounts[i]);
+-        std::memcpy(geometryVertices.data(), task.vertices[i],
+-                    task.vertexCounts[i] * sizeof(vk::VertexFormat::PBRVertex));
++            geometryVertices.resize(task.vertexCounts[i]);
++            std::memcpy(geometryVertices.data(), task.vertices[i],
++                        task.vertexCounts[i] * sizeof(vk::VertexFormat::PBRVertex));
+ 
+-        for (int j = 0; j < task.vertexCounts[i]; j += 4) {
+-            geometryIndices.push_back(j + 0);
+-            geometryIndices.push_back(j + 1);
+-            geometryIndices.push_back(j + 2);
+-            geometryIndices.push_back(j + 2);
+-            geometryIndices.push_back(j + 3);
+-            geometryIndices.push_back(j + 0);
++            for (int j = 0; j < task.vertexCounts[i]; j += 4) {
++                geometryIndices.push_back(j + 0);
++                geometryIndices.push_back(j + 1);
++                geometryIndices.push_back(j + 2);
++                geometryIndices.push_back(j + 2);
++                geometryIndices.push_back(j + 3);
++                geometryIndices.push_back(j + 0);
++            }
++
++            if (geometryVertices.empty() || geometryIndices.empty()) {
++                vertices.pop_back();
++                indices.pop_back();
++                continue;
++            }
++
++            geometryTypes.push_back(geometryType);
++            if (task.geometryGroupNames != nullptr && task.geometryGroupNames[i] != nullptr) {
++                geometryGroupNames.emplace_back(task.geometryGroupNames[i]);
++            } else {
++                geometryGroupNames.emplace_back("default");
++            }
++            geometryGroupIds.push_back(mcvr::HitGroupRegistry::registerName(geometryGroupNames.back()));
++
++            allVertexCount += geometryVertices.size();
++            allIndexCount += geometryIndices.size();
+         }
+-
+-        if (geometryVertices.empty() || geometryIndices.empty()) {
+-            vertices.pop_back();
+-            indices.pop_back();
+-            continue;
+-        }
+-
+-        geometryTypes.push_back(geometryType);
+-        if (task.geometryGroupNames != nullptr && task.geometryGroupNames[i] != nullptr) {
+-            geometryGroupNames.emplace_back(task.geometryGroupNames[i]);
+-        } else {
+-            geometryGroupNames.emplace_back("default");
+-        }
+-
+-        allVertexCount += geometryVertices.size();
+-        allIndexCount += geometryIndices.size();
+     }
+ 
+     std::unique_lock<std::recursive_mutex> lock(mutex_);
+@@ -1460,11 +1494,13 @@ void Chunks::queueChunkBuild(ChunkBuildTask task) {
+         ChunkBuildData::create(task.id, task.x, task.y, task.z, chunks_[task.id]->latestVersion++,
+                                collectChunkEmission, allVertexCount, allIndexCount,
+                                static_cast<uint32_t>(vertices.size()), std::move(geometryTypes),
+-                               std::move(geometryGroupNames), std::move(vertices), std::move(indices));
++                               std::move(geometryGroupNames), std::move(geometryGroupIds), std::move(vertices),
++                               std::move(indices));
+ 
+     if (collectChunkEmission && (Renderer::instance().textures() != nullptr)) {
+         auto textures = Renderer::instance().textures();
+         if (auto emission = textures->emission(); emission != nullptr) {
++            RAD_PROFILE_SCOPE("chunks.queue_chunk_build.build_light_infos");
+             chunkBuildData->buildLightInfos(*emission);
+         }
+     }
+@@ -1475,7 +1511,10 @@ void Chunks::queueChunkBuild(ChunkBuildTask task) {
+         frr.retain(chunkBuildDatas_[task.id]);
+         chunkBuildDatas_[task.id] = nullptr;
+ 
+-        chunkBuildData->build(false);
++        {
++            RAD_PROFILE_SCOPE("chunks.queue_chunk_build.important_build");
++            chunkBuildData->build(false);
++        }
+         if (chunkBuildData->positionBuffer != nullptr) {
+             Renderer::instance().buffers()->queueImportantWorldUpload(chunkBuildData->indexBuffer);
+             Renderer::instance().buffers()->queueImportantWorldUpload(chunkBuildData->positionBuffer);
+diff --git a/src/core/render/chunks.hpp b/src/core/render/chunks.hpp
+index 859f7bb..aebfa35 100644
+--- a/src/core/render/chunks.hpp
++++ b/src/core/render/chunks.hpp
+@@ -56,6 +56,7 @@ struct ChunkBuildData : public SharedObject<ChunkBuildData> {
+     uint32_t geometryCount;
+     std::vector<World::GeometryTypes> geometryTypes;
+     std::vector<std::string> geometryGroupNames;
++    std::vector<uint32_t> geometryGroupIds;
+     std::vector<std::vector<vk::VertexFormat::PBRVertex>> vertices;
+     std::vector<std::vector<uint32_t>> indices;
+     std::vector<VkDeviceAddress> indexBufferAddresses;
+@@ -81,6 +82,7 @@ struct ChunkBuildData : public SharedObject<ChunkBuildData> {
+                    uint32_t geometryCount,
+                    std::vector<World::GeometryTypes> &&geometryTypes,
+                    std::vector<std::string> &&geometryGroupNames,
++                   std::vector<uint32_t> &&geometryGroupIds,
+                    std::vector<std::vector<vk::VertexFormat::PBRVertex>> &&vertices,
+                    std::vector<std::vector<uint32_t>> &&indices);
+ 
+@@ -161,6 +163,7 @@ struct ChunkRenderData : public SharedObject<ChunkRenderData> {
+     uint32_t lightCount = 0;
+     uint32_t geometryCount;
+     std::shared_ptr<std::vector<std::string>> geometryGroupNames;
++    std::shared_ptr<std::vector<uint32_t>> geometryGroupIds;
+ };
+ 
+ struct Chunk1 : public SharedObject<Chunk1> {
+@@ -189,6 +192,7 @@ struct Chunk1 : public SharedObject<Chunk1> {
+     uint32_t lightCount = 0;
+     uint32_t geometryCount;
+     std::shared_ptr<std::vector<std::string>> geometryGroupNames;
++    std::shared_ptr<std::vector<uint32_t>> geometryGroupIds;
+ 
+     float buildFactor(std::chrono::steady_clock::time_point currentTime, glm::vec3 cameraPos, glm::vec3 chunkPos);
+ 
+diff --git a/src/core/render/entities.cpp b/src/core/render/entities.cpp
+index f7cf686..035e491 100644
+--- a/src/core/render/entities.cpp
++++ b/src/core/render/entities.cpp
+@@ -1,5 +1,6 @@
+ #include "core/render/entities.hpp"
+ 
++#include "common/hit_group_registry.hpp"
+ #include "core/render/buffers.hpp"
+ #include "core/render/render_framework.hpp"
+ #include "core/vulkan/vertex.hpp"
+@@ -87,6 +88,7 @@ EntityBuildData::EntityBuildData(int hashCode,
+                                  uint32_t geometryCount,
+                                  std::vector<World::GeometryTypes> &&geometryTypes,
+                                  std::vector<std::string> &&geometryGroupNames,
++                                 std::vector<uint32_t> &&geometryGroupIds,
+                                  std::vector<std::string> &&geometryContentNames,
+                                  std::vector<std::vector<vk::VertexFormat::PBRVertex>> &&vertices,
+                                  std::vector<std::vector<uint32_t>> &&indices)
+@@ -101,6 +103,7 @@ EntityBuildData::EntityBuildData(int hashCode,
+       geometryCount(geometryCount),
+       geometryTypes(std::move(geometryTypes)),
+       geometryGroupNames(std::move(geometryGroupNames)),
++      geometryGroupIds(std::move(geometryGroupIds)),
+       geometryContentNames(std::move(geometryContentNames)),
+       vertices(std::move(vertices)),
+       indices(std::move(indices)),
+@@ -238,6 +241,7 @@ Entity::Entity(std::shared_ptr<EntityBuildData> chunkBuildData) {
+ 
+     geometryCount = chunkBuildData->geometryCount;
+     geometryGroupNames = std::make_shared<std::vector<std::string>>(std::move(chunkBuildData->geometryGroupNames));
++    geometryGroupIds = std::make_shared<std::vector<uint32_t>>(std::move(chunkBuildData->geometryGroupIds));
+     geometryContentNames =
+         std::make_shared<std::vector<std::string>>(std::move(chunkBuildData->geometryContentNames));
+     vertexCounts = std::make_shared<std::vector<uint32_t>>();
+@@ -340,6 +344,7 @@ void Entities::queueBuild(EntitiesBuildTask task) {
+         uint32_t allVertexCount = 0, allIndexCount = 0;
+         std::vector<World::GeometryTypes> geometryTypes;
+         std::vector<std::string> geometryGroupNames;
++        std::vector<uint32_t> geometryGroupIds;
+         std::vector<std::string> geometryContentNames;
+         std::vector<std::vector<vk::VertexFormat::PBRVertex>> vertices;
+         std::vector<std::vector<uint32_t>> indices;
+@@ -364,6 +369,7 @@ void Entities::queueBuild(EntitiesBuildTask task) {
+             } else {
+                 geometryGroupNames.emplace_back("Entity");
+             }
++            geometryGroupIds.push_back(mcvr::HitGroupRegistry::registerName(geometryGroupNames.back()));
+             if (task.geometryContentNames != nullptr && task.geometryContentNames[geometryIndex + i] != nullptr) {
+                 geometryContentNames.emplace_back(task.geometryContentNames[geometryIndex + i]);
+             } else {
+@@ -929,6 +935,7 @@ void Entities::queueBuild(EntitiesBuildTask task) {
+                 indices.pop_back();
+                 geometryTypes.pop_back();
+                 geometryGroupNames.pop_back();
++                geometryGroupIds.pop_back();
+                 geometryContentNames.pop_back();
+             } else {
+                 allVertexCount += geometryVertices.size();
+@@ -941,9 +948,9 @@ void Entities::queueBuild(EntitiesBuildTask task) {
+ 
+         std::shared_ptr<EntityBuildData> chunkBuildData =
+             EntityBuildData::create(hashCode, x, y, z, rayTracingFlag, postRenderFlag, prebuiltBLAS, coordinate,
+-                                    geometryCountWithoutGlint,
+-                                    std::move(geometryTypes), std::move(geometryGroupNames),
+-                                    std::move(geometryContentNames), std::move(vertices), std::move(indices));
++                                     geometryCountWithoutGlint,
++                                     std::move(geometryTypes), std::move(geometryGroupNames), std::move(geometryGroupIds),
++                                     std::move(geometryContentNames), std::move(vertices), std::move(indices));
+ 
+         if (post) {
+             entityPostBuildDataBatch_->addData(chunkBuildData);
+diff --git a/src/core/render/entities.hpp b/src/core/render/entities.hpp
+index e570754..e407ec6 100644
+--- a/src/core/render/entities.hpp
++++ b/src/core/render/entities.hpp
+@@ -55,6 +55,7 @@ struct EntityBuildData : public SharedObject<EntityBuildData> {
+     uint32_t geometryCount;
+     std::vector<World::GeometryTypes> geometryTypes;
+     std::vector<std::string> geometryGroupNames;
++    std::vector<uint32_t> geometryGroupIds;
+     std::vector<std::string> geometryContentNames;
+     std::vector<std::vector<vk::VertexFormat::PBRVertex>> vertices;
+     std::vector<std::vector<uint32_t>> indices;
+@@ -74,6 +75,7 @@ struct EntityBuildData : public SharedObject<EntityBuildData> {
+                     uint32_t geometryCount,
+                     std::vector<World::GeometryTypes> &&geometryTypes,
+                     std::vector<std::string> &&geometryGroupNames,
++                    std::vector<uint32_t> &&geometryGroupIds,
+                     std::vector<std::string> &&geometryContentNames,
+                     std::vector<std::vector<vk::VertexFormat::PBRVertex>> &&vertices,
+                     std::vector<std::vector<uint32_t>> &&indices);
+@@ -119,6 +121,7 @@ struct Entity : public SharedObject<Entity> {
+ 
+     uint32_t geometryCount;
+     std::shared_ptr<std::vector<std::string>> geometryGroupNames;
++    std::shared_ptr<std::vector<uint32_t>> geometryGroupIds;
+     std::shared_ptr<std::vector<std::string>> geometryContentNames;
+     std::shared_ptr<std::vector<uint32_t>> vertexCounts;
+     std::shared_ptr<std::vector<uint32_t>> indexCounts;
+diff --git a/src/core/render/modules/world/ray_tracing/submodules/world_prepare.cpp b/src/core/render/modules/world/ray_tracing/submodules/world_prepare.cpp
+index 2669578..bb27438 100644
+--- a/src/core/render/modules/world/ray_tracing/submodules/world_prepare.cpp
++++ b/src/core/render/modules/world/ray_tracing/submodules/world_prepare.cpp
+@@ -1,5 +1,7 @@
+ #include "core/render/modules/world/ray_tracing/submodules/world_prepare.hpp"
+ 
++#include "common/hit_group_registry.hpp"
++#include "common/profiler.hpp"
+ #include "core/render/buffers.hpp"
+ #include "core/render/chunks.hpp"
+ #include "core/render/entities.hpp"
+@@ -31,9 +33,37 @@ void WorldPrepare::build() {
+ }
+ 
+ WorldPrepareContext::WorldPrepareContext(std::shared_ptr<FrameworkContext> frameworkContext,
+-                                         std::shared_ptr<WorldPrepare> worldPrepare)
++                                          std::shared_ptr<WorldPrepare> worldPrepare)
+     : frameworkContext(frameworkContext), worldPrepare(worldPrepare) {}
+ 
++WorldPrepareContext::CachedChunkRow &
++WorldPrepareContext::refreshCachedChunkRow(size_t index, const std::shared_ptr<Chunk1> &chunk) {
++    if (cachedChunkRows.size() <= index) { cachedChunkRows.resize(index + 1); }
++
++    auto &row = cachedChunkRows[index];
++    if (row.chunk == chunk && row.latestVersion == chunk->latestVersion && row.blasVersion == chunk->blasVersion &&
++        row.geometryCount == chunk->geometryCount) {
++        return row;
++    }
++
++    row.chunk = chunk;
++    row.latestVersion = chunk->latestVersion;
++    row.blasVersion = chunk->blasVersion;
++    row.geometryCount = chunk->geometryCount;
++    row.indexBufferAddresses = chunk->indexBufferAddresses;
++    row.positionBufferAddresses = chunk->positionBufferAddresses;
++    row.materialBufferAddresses = chunk->materialBufferAddresses;
++    row.geometryGroupIds = chunk->geometryGroupIds;
++    row.blas = chunk->blas;
++    row.indexBuffer = chunk->indexBuffer;
++    row.positionBuffer = chunk->positionBuffer;
++    row.materialBuffer = chunk->materialBuffer;
++    row.lightInfos = chunk->lightInfos;
++    row.lightBuffer = chunk->lightBuffer;
++    row.lightCount = chunk->lightCount;
++    return row;
++}
++
+ void WorldPrepareContext::uploadBuffer(std::vector<uint32_t> &blasOffsets,
+                                        std::vector<uint64_t> &indexBufferAddrs,
+                                        std::vector<uint64_t> &positionBufferAddrs,
+@@ -141,6 +171,7 @@ void WorldPrepareContext::render() {
+     auto worldPrepare1 = worldPrepare.lock();
+     if (rayTracingModule == nullptr) { return; }
+     if (worldPrepare1 == nullptr) { return; }
++    RAD_PROFILE_SCOPE("world_prepare.render");
+ 
+     std::shared_ptr<Framework> framework = Renderer::instance().framework();
+     std::shared_ptr<FrameworkContext> context = frameworkContext.lock();
+@@ -155,8 +186,15 @@ void WorldPrepareContext::render() {
+ 
+     auto chunkBuildScheduler = chunks->chunkBuildScheduler();
+     if (chunkBuildScheduler != nullptr) {
+-        chunkBuildScheduler->tryCheckBatchesFinish();
+-        chunkBuildScheduler->tryScheduleBatches(chunkBuildScheduler->chunkBuildingBatchSize());
++        RAD_PROFILE_SCOPE("world_prepare.chunk_scheduler");
++        {
++            RAD_PROFILE_SCOPE("world_prepare.try_check_batches_finish");
++            chunkBuildScheduler->tryCheckBatchesFinish();
++        }
++        {
++            RAD_PROFILE_SCOPE("world_prepare.try_schedule_batches");
++            chunkBuildScheduler->tryScheduleBatches(chunkBuildScheduler->chunkBuildingBatchSize());
++        }
+     }
+ 
+     std::unique_lock<std::recursive_mutex> lock(chunks->mutex());
+@@ -177,7 +215,7 @@ void WorldPrepareContext::render() {
+ 
+     uint32_t blasAccu = 0, blasGroupAccu = 0;
+     std::vector<uint32_t> blasOffset;
+-    hitGroupNames.clear();
++    hitGroupNameIds.clear();
+     std::vector<uint64_t> indexBufferAddrs;
+     std::vector<uint64_t> positionBufferAddrs, materialBufferAddrs;
+     std::vector<uint64_t> lastIndexBufferAddrs;
+@@ -187,9 +225,13 @@ void WorldPrepareContext::render() {
+     tlasBuilder = vk::TLASBuilder::create();
+     auto &instanceBuilder = tlasBuilder->beginInstanceBuilder();
+     int blasIndex = 0;
++    uint32_t entityInstanceCount = 0;
++    uint32_t chunkInstanceCount = 0;
++    uint32_t activeChunkSlots = 0;
+ 
+     // Entity
+     {
++        RAD_PROFILE_SCOPE("world_prepare.entity_instance_loop");
+         auto entityBatch = entities->entityBatch();
+ 
+         if (entityBatch != nullptr) {
+@@ -250,14 +292,14 @@ void WorldPrepareContext::render() {
+                     throw std::runtime_error("prebuilt blas not implemented yet!");
+                 }
+ 
+-                hitGroupNames.push_back("shadow");
++                hitGroupNameIds.push_back(mcvr::HitGroupRegistry::shadowId());
+                 for (int j = 0; j < entities1[i]->geometryCount; j++) {
+-                    const std::string &groupName =
+-                        entities1[i]->geometryGroupNames != nullptr &&
+-                                j < static_cast<int>(entities1[i]->geometryGroupNames->size()) ?
+-                            (*entities1[i]->geometryGroupNames)[j] :
+-                            "default";
+-                    hitGroupNames.push_back(groupName);
++                    if (entities1[i]->geometryGroupIds != nullptr &&
++                        j < static_cast<int>(entities1[i]->geometryGroupIds->size())) {
++                        hitGroupNameIds.push_back((*entities1[i]->geometryGroupIds)[j]);
++                    } else {
++                        hitGroupNameIds.push_back(mcvr::HitGroupRegistry::defaultId());
++                    }
+                 }
+ 
+                 for (int j = 0; j < entities1[i]->geometryCount; j++) {
+@@ -317,80 +359,105 @@ void WorldPrepareContext::render() {
+                 blasGroupAccu += entities1[i]->geometryCount + 1;
+ 
+                 blasIndex++;
++                entityInstanceCount++;
+             }
+         }
+     }
+ 
+     // Chunk
+     {
++        RAD_PROFILE_SCOPE("world_prepare.chunk_instance_loop");
+         auto &chunk1s = chunks->chunks();
+         for (int i = 0; i < chunk1s.size(); i++) {
+             auto &chunk1 = chunk1s[i];
+-            if (chunk1->blas == nullptr) continue;
+-            chunk1->retainResources(framework->frameResourceRetainer());
++            if (chunk1->blas == nullptr) {
++                if (cachedChunkRows.size() > static_cast<size_t>(i)) { cachedChunkRows[i] = CachedChunkRow{}; }
++                continue;
++            }
++            activeChunkSlots++;
++            auto &chunkRow = refreshCachedChunkRow(i, chunk1);
+ 
+             VkTransformMatrixKHR transform = {
+-                1, 0, 0, static_cast<float>(static_cast<double>(chunk1->x) - cameraPos.x), //
+-                0, 1, 0, static_cast<float>(static_cast<double>(chunk1->y) - cameraPos.y), //
+-                0, 0, 1, static_cast<float>(static_cast<double>(chunk1->z) - cameraPos.z), //
++                1, 0, 0, static_cast<float>(static_cast<double>(chunkRow.chunk->x) - cameraPos.x), //
++                0, 1, 0, static_cast<float>(static_cast<double>(chunkRow.chunk->y) - cameraPos.y), //
++                0, 0, 1, static_cast<float>(static_cast<double>(chunkRow.chunk->z) - cameraPos.z), //
+             };
+ 
+-            instanceBuilder.defineInstance(transform, blasIndex, 0x01, blasGroupAccu, 0, chunk1->blas);
++            instanceBuilder.defineInstance(transform, blasIndex, 0x01, blasGroupAccu, 0, chunkRow.blas);
+ 
+-            hitGroupNames.push_back("shadow");
+-            for (int j = 0; j < chunk1->geometryCount; j++) {
+-                const std::string &groupName =
+-                    chunk1->geometryGroupNames != nullptr && j < static_cast<int>(chunk1->geometryGroupNames->size()) ?
+-                        (*chunk1->geometryGroupNames)[j] :
+-                        "default";
+-                hitGroupNames.push_back(groupName);
++            hitGroupNameIds.push_back(mcvr::HitGroupRegistry::shadowId());
++            for (int j = 0; j < chunkRow.geometryCount; j++) {
++                if (chunkRow.geometryGroupIds != nullptr && j < static_cast<int>(chunkRow.geometryGroupIds->size())) {
++                    hitGroupNameIds.push_back((*chunkRow.geometryGroupIds)[j]);
++                } else {
++                    hitGroupNameIds.push_back(mcvr::HitGroupRegistry::defaultId());
++                }
+             }
+ 
+-            for (int j = 0; j < chunk1->geometryCount; j++) {
+-                indexBufferAddrs.push_back((*chunk1->indexBufferAddresses)[j]);
+-                positionBufferAddrs.push_back((*chunk1->positionBufferAddresses)[j]);
+-                materialBufferAddrs.push_back((*chunk1->materialBufferAddresses)[j]);
++            for (int j = 0; j < chunkRow.geometryCount; j++) {
++                indexBufferAddrs.push_back((*chunkRow.indexBufferAddresses)[j]);
++                positionBufferAddrs.push_back((*chunkRow.positionBufferAddresses)[j]);
++                materialBufferAddrs.push_back((*chunkRow.materialBufferAddresses)[j]);
+                 lastIndexBufferAddrs.push_back(0);
+                 lastPositionBufferAddrs.push_back(0);
+             }
+ 
+             {
+                 glm::mat4 lastObjToWorldMat = glm::transpose(glm::mat4(
+-                    glm::vec4(1.0f, 0.0f, 0.0f, static_cast<float>(static_cast<double>(chunk1->x) - cameraPos.x)), //
+-                    glm::vec4(0.0f, 1.0f, 0.0f, static_cast<float>(static_cast<double>(chunk1->y) - cameraPos.y)), //
+-                    glm::vec4(0.0f, 0.0f, 1.0f, static_cast<float>(static_cast<double>(chunk1->z) - cameraPos.z)), //
++                    glm::vec4(1.0f, 0.0f, 0.0f,
++                              static_cast<float>(static_cast<double>(chunkRow.chunk->x) - cameraPos.x)), //
++                    glm::vec4(0.0f, 1.0f, 0.0f,
++                              static_cast<float>(static_cast<double>(chunkRow.chunk->y) - cameraPos.y)), //
++                    glm::vec4(0.0f, 0.0f, 1.0f,
++                              static_cast<float>(static_cast<double>(chunkRow.chunk->z) - cameraPos.z)), //
+                     glm::vec4(0.0f, 0.0f, 0.0f, 1.0f)));
+                 lastObjToWorldMats.push_back(lastObjToWorldMat);
+             }
+ 
+             blasOffset.push_back(blasAccu);
+-            blasAccu += chunk1->geometryCount;
+-            blasGroupAccu += chunk1->geometryCount + 1;
++            blasAccu += chunkRow.geometryCount;
++            blasGroupAccu += chunkRow.geometryCount + 1;
+ 
+             blasIndex++;
++            chunkInstanceCount++;
+         }
++        RAD_PROFILE_COUNTER("world_prepare.chunk_slots", chunk1s.size());
++        RAD_PROFILE_COUNTER("world_prepare.active_chunks", activeChunkSlots);
++        RAD_PROFILE_COUNTER("world_prepare.chunk_instances", chunkInstanceCount);
+     }
++    RAD_PROFILE_COUNTER("world_prepare.entity_instances", entityInstanceCount);
++    RAD_PROFILE_COUNTER("world_prepare.hit_group_names", hitGroupNameIds.size());
++    RAD_PROFILE_COUNTER("world_prepare.tlas_instances", instanceBuilder.instances.size());
+ 
+     if (instanceBuilder.instances.empty()) {
+         tlas = nullptr;
+         return;
+     }
+ 
+-    tlas = instanceBuilder.endInstanceBuilder(device, vma)
+-               ->defineBuildProperty(VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR)
+-               ->querySizeInfo(device)
+-               ->allocateBuffers(physicalDevice, device, vma)
+-               ->buildAndSubmit(device, worldCommandBuffer);
++    {
++        RAD_PROFILE_SCOPE("world_prepare.tlas_build");
++        tlas = instanceBuilder.endInstanceBuilder(device, vma)
++                   ->defineBuildProperty(VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR)
++                   ->querySizeInfo(device)
++                   ->allocateBuffers(physicalDevice, device, vma)
++                   ->buildAndSubmit(device, worldCommandBuffer);
++    }
+ 
+-    worldCommandBuffer->barriersMemory({vk::CommandBuffer::MemoryBarrier{
+-        .srcStageMask = VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+-        .srcAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+-        .dstStageMask = VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
+-        .dstAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+-    }});
++    {
++        RAD_PROFILE_SCOPE("world_prepare.tlas_barrier");
++        worldCommandBuffer->barriersMemory({vk::CommandBuffer::MemoryBarrier{
++            .srcStageMask = VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
++            .srcAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
++            .dstStageMask = VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
++            .dstAccessMask = VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR,
++        }});
++    }
+ 
+-    uploadBuffer(blasOffset, indexBufferAddrs, positionBufferAddrs, materialBufferAddrs, lastIndexBufferAddrs,
+-                 lastPositionBufferAddrs, lastObjToWorldMats);
++    {
++        RAD_PROFILE_SCOPE("world_prepare.upload_buffers");
++        uploadBuffer(blasOffset, indexBufferAddrs, positionBufferAddrs, materialBufferAddrs, lastIndexBufferAddrs,
++                     lastPositionBufferAddrs, lastObjToWorldMats);
++    }
+ }
+ 
+ void WorldPrepareContext::setupHitGroupSbt(const std::unordered_map<std::string, uint32_t> &hitGroupNameToIndex,
+@@ -399,17 +466,28 @@ void WorldPrepareContext::setupHitGroupSbt(const std::unordered_map<std::string,
+                                            std::shared_ptr<vk::CommandBuffer> commandBuffer,
+                                            std::shared_ptr<vk::SBT> updateSbt,
+                                            std::shared_ptr<vk::SBT> querySbt) {
++    RAD_PROFILE_SCOPE("world_prepare.setup_hit_group_sbt");
+     std::vector<uint32_t> hitGroupIndices;
+-    hitGroupIndices.reserve(hitGroupNames.size());
++    hitGroupIndices.reserve(hitGroupNameIds.size());
+ 
+-    for (const std::string &groupName : hitGroupNames) {
+-        if (groupName == "shadow") {
+-            hitGroupIndices.push_back(shadowHitGroupIndex);
+-            continue;
++    {
++        RAD_PROFILE_SCOPE("world_prepare.resolve_hit_group_names");
++        const auto registeredNames = mcvr::HitGroupRegistry::namesSnapshot();
++        for (const uint32_t groupId : hitGroupNameIds) {
++            if (groupId == mcvr::HitGroupRegistry::shadowId()) {
++                hitGroupIndices.push_back(shadowHitGroupIndex);
++                continue;
++            }
++
++            if (groupId >= registeredNames.size()) {
++                hitGroupIndices.push_back(fallbackHitGroupIndex);
++                continue;
++            }
++
++            const std::string &groupName = registeredNames[groupId];
++            auto iter = hitGroupNameToIndex.find(groupName);
++            hitGroupIndices.push_back(iter == hitGroupNameToIndex.end() ? fallbackHitGroupIndex : iter->second);
+         }
+-
+-        auto iter = hitGroupNameToIndex.find(groupName);
+-        hitGroupIndices.push_back(iter == hitGroupNameToIndex.end() ? fallbackHitGroupIndex : iter->second);
+     }
+ 
+     if (updateSbt != nullptr) { updateSbt->setupHitSBT(hitGroupIndices, commandBuffer); }
+diff --git a/src/core/render/modules/world/ray_tracing/submodules/world_prepare.hpp b/src/core/render/modules/world/ray_tracing/submodules/world_prepare.hpp
+index 97a1d12..c05f3de 100644
+--- a/src/core/render/modules/world/ray_tracing/submodules/world_prepare.hpp
++++ b/src/core/render/modules/world/ray_tracing/submodules/world_prepare.hpp
+@@ -3,6 +3,7 @@
+ #include "common/shared.hpp"
+ #include "common/singleton.hpp"
+ #include "core/all_extern.hpp"
++#include "core/render/chunks.hpp"
+ #include "core/vulkan/all_core_vulkan.hpp"
+ 
+ #include <map>
+@@ -58,7 +59,26 @@ struct WorldPrepareContext : public SharedObject<WorldPrepareContext> {
+     std::shared_ptr<vk::DeviceLocalBuffer> lastIndexBufferAddr;
+     std::shared_ptr<vk::DeviceLocalBuffer> lastPositionBufferAddr;
+     std::shared_ptr<vk::DeviceLocalBuffer> lastObjToWorldMat;
+-    std::vector<std::string> hitGroupNames;
++    std::vector<uint32_t> hitGroupNameIds;
++
++    struct CachedChunkRow {
++        std::shared_ptr<Chunk1> chunk;
++        int64_t latestVersion = -1;
++        int64_t blasVersion = -1;
++        uint32_t geometryCount = 0;
++        std::shared_ptr<std::vector<VkDeviceAddress>> indexBufferAddresses;
++        std::shared_ptr<std::vector<VkDeviceAddress>> positionBufferAddresses;
++        std::shared_ptr<std::vector<VkDeviceAddress>> materialBufferAddresses;
++        std::shared_ptr<std::vector<uint32_t>> geometryGroupIds;
++        std::shared_ptr<vk::BLAS> blas;
++        std::shared_ptr<vk::DeviceLocalBuffer> indexBuffer;
++        std::shared_ptr<vk::DeviceLocalBuffer> positionBuffer;
++        std::shared_ptr<vk::DeviceLocalBuffer> materialBuffer;
++        std::shared_ptr<std::vector<LightInfo>> lightInfos;
++        std::shared_ptr<vk::DeviceLocalBuffer> lightBuffer;
++        uint32_t lightCount = 0;
++    };
++    std::vector<CachedChunkRow> cachedChunkRows;
+ 
+     WorldPrepareContext(std::shared_ptr<FrameworkContext> frameworkContext, std::shared_ptr<WorldPrepare> worldprepare);
+ 
+@@ -73,7 +93,8 @@ struct WorldPrepareContext : public SharedObject<WorldPrepareContext> {
+                           uint32_t fallbackHitGroupIndex,
+                           uint32_t shadowHitGroupIndex,
+                           std::shared_ptr<vk::CommandBuffer> commandBuffer,
+-                          std::shared_ptr<vk::SBT> updateSbt,
+-                          std::shared_ptr<vk::SBT> querySbt);
++                           std::shared_ptr<vk::SBT> updateSbt,
++                           std::shared_ptr<vk::SBT> querySbt);
++    CachedChunkRow &refreshCachedChunkRow(size_t index, const std::shared_ptr<Chunk1> &chunk);
+     void render();
+ };
+diff --git a/src/core/render/modules/world/svgf/blue_noise.cpp b/src/core/render/modules/world/svgf/blue_noise.cpp
+index 90819e5..c89a02e 100644
+--- a/src/core/render/modules/world/svgf/blue_noise.cpp
++++ b/src/core/render/modules/world/svgf/blue_noise.cpp
+@@ -2,11 +2,26 @@
+ 
+ #include <iostream>
+ 
+-// Include the FFX blue noise data
+-// The file defines global arrays:
+-//   - sobol_256spp_256d[256*256]
+-//   - scramblingTile[128*128*8]
+-#include "../../../extern/FidelityFX-SDK/sdk/src/components/sssr/samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp.cpp"
++#if __has_include("../../../extern/FidelityFX-SDK/sdk/src/components/sssr/samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp.cpp")
++#    include "../../../extern/FidelityFX-SDK/sdk/src/components/sssr/samplerBlueNoiseErrorDistribution_128x128_OptimizedFor_2d2d2d2d_1spp.cpp"
++#    define RADIANCE_HAS_FFX_BLUE_NOISE_DATA 1
++#else
++#    define RADIANCE_HAS_FFX_BLUE_NOISE_DATA 0
++#endif
++
++namespace {
++
++uint32_t fallbackBlueNoiseValue(size_t index, uint32_t salt) {
++    uint32_t x = static_cast<uint32_t>(index) + salt;
++    x ^= x >> 16;
++    x *= 0x7feb352du;
++    x ^= x >> 15;
++    x *= 0x846ca68bu;
++    x ^= x >> 16;
++    return x;
++}
++
++} // namespace
+ 
+ std::ostream &blueNoiseCout() {
+     return std::cout << "[BlueNoise] ";
+@@ -20,10 +35,13 @@ BlueNoise::BlueNoise(std::shared_ptr<vk::Device> device, std::shared_ptr<vk::VMA
+         vma, device, SOBOL_SIZE * sizeof(uint32_t),
+         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
+ 
+-    // Upload Sobol data - convert from int to uint32_t
+     std::vector<uint32_t> sobolData(SOBOL_SIZE);
+     for (size_t i = 0; i < SOBOL_SIZE; i++) {
++#if RADIANCE_HAS_FFX_BLUE_NOISE_DATA
+         sobolData[i] = static_cast<uint32_t>(sobol_256spp_256d[i]);
++#else
++        sobolData[i] = fallbackBlueNoiseValue(i, 0x51f15eedu);
++#endif
+     }
+     m_sobolBuffer->uploadToStagingBuffer(sobolData.data());
+ 
+@@ -32,10 +50,13 @@ BlueNoise::BlueNoise(std::shared_ptr<vk::Device> device, std::shared_ptr<vk::VMA
+         vma, device, SCRAMBLING_SIZE * sizeof(uint32_t),
+         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT);
+ 
+-    // Upload scrambling data - convert from int to uint32_t
+     std::vector<uint32_t> scramblingData(SCRAMBLING_SIZE);
+     for (size_t i = 0; i < SCRAMBLING_SIZE; i++) {
++#if RADIANCE_HAS_FFX_BLUE_NOISE_DATA
+         scramblingData[i] = static_cast<uint32_t>(scramblingTile[i]);
++#else
++        scramblingData[i] = fallbackBlueNoiseValue(i, 0x9e3779b9u);
++#endif
+     }
+     m_scramblingBuffer->uploadToStagingBuffer(scramblingData.data());
+ 
+diff --git a/src/core/render/render_framework.cpp b/src/core/render/render_framework.cpp
+index 635365d..570d7d5 100644
+--- a/src/core/render/render_framework.cpp
++++ b/src/core/render/render_framework.cpp
+@@ -1,5 +1,6 @@
+ #include "core/render/render_framework.hpp"
+ 
++#include "common/profiler.hpp"
+ #include "common/shared.hpp"
+ #include "core/render/buffers.hpp"
+ #include "core/render/chunks.hpp"
+@@ -186,6 +187,8 @@ Framework::~Framework() {
+ 
+ void Framework::acquireContext() {
+     if (!running_) return;
++    RAD_PROFILE_FRAME();
++    RAD_PROFILE_SCOPE("framework.acquire_context");
+ 
+     std::shared_ptr<FrameworkContext> lastContext;
+     if (currentContext_) lastContext = currentContext_;
+@@ -193,8 +196,11 @@ void Framework::acquireContext() {
+ 
+     std::shared_ptr<vk::Semaphore> imageAcquiredSemaphore = acquireSemaphore();
+     uint32_t imageIndex;
+-    result = vkAcquireNextImageKHR(device_->vkDevice(), swapchain_->vkSwapchain(), UINT64_MAX,
+-                                   imageAcquiredSemaphore->vkSemaphore(), VK_NULL_HANDLE, &imageIndex);
++    {
++        RAD_PROFILE_SCOPE("framework.acquire_next_image");
++        result = vkAcquireNextImageKHR(device_->vkDevice(), swapchain_->vkSwapchain(), UINT64_MAX,
++                                       imageAcquiredSemaphore->vkSemaphore(), VK_NULL_HANDLE, &imageIndex);
++    }
+     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+         recycleSemaphore(imageAcquiredSemaphore);
+         recreate();
+@@ -207,7 +213,10 @@ void Framework::acquireContext() {
+     }
+ 
+     std::shared_ptr<vk::Fence> fence = contexts_[imageIndex]->commandFinishedFence;
+-    result = vkWaitForFences(device_->vkDevice(), 1, &fence->vkFence(), true, UINT64_MAX);
++    {
++        RAD_PROFILE_SCOPE("framework.fence_wait");
++        result = vkWaitForFences(device_->vkDevice(), 1, &fence->vkFence(), true, UINT64_MAX);
++    }
+     if (result != VK_SUCCESS) {
+         std::cout << "vkWaitForFences failed with error: " << std::dec << result << std::endl;
+         waitDeviceIdle();
+@@ -225,21 +234,27 @@ void Framework::acquireContext() {
+     }
+     currentContext_->imageAcquiredSemaphore = imageAcquiredSemaphore;
+ 
+-    currentContext_->uploadCommandBuffer->begin();
+-    currentContext_->worldCommandBuffer->begin();
+-    currentContext_->overlayCommandBuffer->begin();
+-    currentContext_->fuseCommandBuffer->begin();
++    {
++        RAD_PROFILE_SCOPE("framework.command_buffers_begin");
++        currentContext_->uploadCommandBuffer->begin();
++        currentContext_->worldCommandBuffer->begin();
++        currentContext_->overlayCommandBuffer->begin();
++        currentContext_->fuseCommandBuffer->begin();
++    }
+ 
+-    auto pipelineContext = pipeline_->acquirePipelineContext(currentContext_);
+-    std::shared_ptr<UIModuleContext> lastUIContext =
+-        lastContext == nullptr ? nullptr : pipeline_->acquirePipelineContext(lastContext)->uiModuleContext;
++    {
++        RAD_PROFILE_SCOPE("framework.pipeline_begin_reset");
++        auto pipelineContext = pipeline_->acquirePipelineContext(currentContext_);
++        std::shared_ptr<UIModuleContext> lastUIContext =
++            lastContext == nullptr ? nullptr : pipeline_->acquirePipelineContext(lastContext)->uiModuleContext;
+ 
+-    pipelineContext->uiModuleContext->begin(lastUIContext);
+-    Renderer::instance().buffers()->resetFrame();
+-    Renderer::instance().textures()->resetFrame();
+-    Renderer::instance().world()->resetFrame();
+-    Renderer::instance().world()->chunks()->resetFrame();
+-    Renderer::instance().world()->entities()->resetFrame();
++        pipelineContext->uiModuleContext->begin(lastUIContext);
++        Renderer::instance().buffers()->resetFrame();
++        Renderer::instance().textures()->resetFrame();
++        Renderer::instance().world()->resetFrame();
++        Renderer::instance().world()->chunks()->resetFrame();
++        Renderer::instance().world()->entities()->resetFrame();
++    }
+ 
+     static int frames = 0;
+     static auto lastTime = std::chrono::high_resolution_clock::now();
+@@ -261,23 +276,42 @@ void Framework::acquireContext() {
+ 
+ void Framework::submitCommand() {
+     if (!running_) return;
++    RAD_PROFILE_SCOPE("framework.submit_command");
+ 
+     Renderer::instance().framework()->safeAcquireCurrentContext(); // ensure context is non nullptr
+ 
+-    Renderer::instance().textures()->performQueuedUpload();
+-    Renderer::instance().buffers()->performQueuedUpload();
+-    Renderer::instance().buffers()->buildAndUploadOverlayUniformBuffer();
++    {
++        RAD_PROFILE_SCOPE("framework.texture_upload");
++        Renderer::instance().textures()->performQueuedUpload();
++    }
++    {
++        RAD_PROFILE_SCOPE("framework.buffer_upload");
++        Renderer::instance().buffers()->performQueuedUpload();
++        Renderer::instance().buffers()->buildAndUploadOverlayUniformBuffer();
++    }
+ 
+     auto pipelineContext = pipeline_->acquirePipelineContext(currentContext_);
+-    if (Renderer::instance().world()->shouldRender()) pipelineContext->worldPipelineContext->render();
+-    pipelineContext->uiModuleContext->end();
++    if (Renderer::instance().world()->shouldRender()) {
++        RAD_PROFILE_SCOPE("framework.world_render");
++        pipelineContext->worldPipelineContext->render();
++    }
++    {
++        RAD_PROFILE_SCOPE("framework.ui_end");
++        pipelineContext->uiModuleContext->end();
++    }
+ 
+-    currentContext_->fuseFinal();
++    {
++        RAD_PROFILE_SCOPE("framework.fuse_final");
++        currentContext_->fuseFinal();
++    }
+ 
+-    currentContext_->uploadCommandBuffer->end();
+-    currentContext_->worldCommandBuffer->end();
+-    currentContext_->overlayCommandBuffer->end();
+-    currentContext_->fuseCommandBuffer->end();
++    {
++        RAD_PROFILE_SCOPE("framework.command_buffers_end");
++        currentContext_->uploadCommandBuffer->end();
++        currentContext_->worldCommandBuffer->end();
++        currentContext_->overlayCommandBuffer->end();
++        currentContext_->fuseCommandBuffer->end();
++    }
+ 
+     std::vector<VkSemaphore> waitSemaphores = {currentContext_->imageAcquiredSemaphore->vkSemaphore()};
+     std::vector<VkPipelineStageFlags> waitStageMasks = {VK_PIPELINE_STAGE_ALL_COMMANDS_BIT};
+@@ -300,8 +334,11 @@ void Framework::submitCommand() {
+     vkSubmitInfo.pSignalSemaphores = signalSemaphores.data();
+ 
+     std::shared_ptr<vk::Fence> fence = currentContext_->commandFinishedFence;
+-    vkResetFences(device_->vkDevice(), 1, &fence->vkFence());
+-    vkQueueSubmit(device_->mainVkQueue(), 1, &vkSubmitInfo, fence->vkFence());
++    {
++        RAD_PROFILE_SCOPE("framework.queue_submit");
++        vkResetFences(device_->vkDevice(), 1, &fence->vkFence());
++        vkQueueSubmit(device_->mainVkQueue(), 1, &vkSubmitInfo, fence->vkFence());
++    }
+ }
+ 
+ void Framework::present() {
+@@ -653,6 +690,7 @@ FrameResourceRetainer::FrameResourceRetainer(std::shared_ptr<Framework> framewor
+ }
+ 
+ void FrameResourceRetainer::beginFrame(uint32_t frameIndex) {
++    RAD_PROFILE_SCOPE("frr.begin_frame");
+     std::unique_lock<std::recursive_mutex> lck(mtx_);
+ 
+     currentFrameIndex_ = frameIndex;
+diff --git a/src/core/vulkan/sbt.cpp b/src/core/vulkan/sbt.cpp
+index d93e9b4..8d4d5d8 100644
+--- a/src/core/vulkan/sbt.cpp
++++ b/src/core/vulkan/sbt.cpp
+@@ -1,5 +1,6 @@
+ #include "core/vulkan/sbt.hpp"
+ 
++#include "common/profiler.hpp"
+ #include "core/vulkan/buffer.hpp"
+ #include "core/vulkan/command.hpp"
+ #include "core/vulkan/device.hpp"
+@@ -85,45 +86,60 @@ void vk::SBT::uploadStaticSBT(std::shared_ptr<CommandBuffer> commandBuffer) {
+ }
+ 
+ void vk::SBT::setupHitSBT(std::vector<uint32_t> &hitGroupIndices, std::shared_ptr<CommandBuffer> commandBuffer) {
++    RAD_PROFILE_SCOPE("sbt.setup_hit_sbt");
+     VkDeviceSize rhitSBTSize = hitGroupIndices.size() * alignedHandleSize_;
+     if (rhitSBTSize == 0) {
+         std::cerr << "Hit group should contains something!" << std::endl;
+         exit(1);
+     }
+ 
++    if (rhitSBT_ != nullptr && cachedHitGroupIndices_ == hitGroupIndices && rhitSBT_->size() == rhitSBTSize) {
++        hitRegion_.deviceAddress = rhitSBT_->bufferAddress();
++        hitRegion_.stride = alignedHandleSize_;
++        hitRegion_.size = rhitSBTSize;
++        return;
++    }
++
+     std::vector<uint8_t> cachedRhitSBT(rhitSBTSize, 0);
+-    for (uint32_t i = 0; i < hitGroupIndices.size(); ++i) {
+-        uint32_t hit_group_id = hitGroupIndices[i];
++    {
++        RAD_PROFILE_SCOPE("sbt.fill_hit_sbt");
++        for (uint32_t i = 0; i < hitGroupIndices.size(); ++i) {
++            uint32_t hit_group_id = hitGroupIndices[i];
+ 
+-        // Access source storage using handleSize_ (tightly packed)
+-        uint32_t palette_offset = (1 + missCount_ + hit_group_id) * handleSize_;
+-        uint8_t *pSourceHandle = shaderHandleStorage_.data() + palette_offset;
++            // Access source storage using handleSize_ (tightly packed)
++            uint32_t palette_offset = (1 + missCount_ + hit_group_id) * handleSize_;
++            uint8_t *pSourceHandle = shaderHandleStorage_.data() + palette_offset;
+ 
+-        // Write to destination SBT using alignedHandleSize_ (stride requirement)
+-        uint8_t *pDest = cachedRhitSBT.data() + i * alignedHandleSize_;
+-        memcpy(pDest, pSourceHandle, handleSize_);
++            // Write to destination SBT using alignedHandleSize_ (stride requirement)
++            uint8_t *pDest = cachedRhitSBT.data() + i * alignedHandleSize_;
++            memcpy(pDest, pSourceHandle, handleSize_);
++        }
+     }
+ 
+-    if (rhitSBT_ == nullptr || rhitSBT_->size() != rhitSBTSize) {
+-        rhitSBT_ = DeviceLocalBuffer::create(
+-            vma_, device_, false, rhitSBTSize,
+-            VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 0,
+-            VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, baseAlignment_);
+-    }
++    {
++        RAD_PROFILE_SCOPE("sbt.upload_hit_sbt");
++        if (rhitSBT_ == nullptr || rhitSBT_->size() != rhitSBTSize) {
++            rhitSBT_ = DeviceLocalBuffer::create(
++                vma_, device_, false, rhitSBTSize,
++                VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 0,
++                VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, baseAlignment_);
++        }
+ 
+-    rhitSBT_->uploadToStagingBuffer(cachedRhitSBT.data());
+-    rhitSBT_->uploadToBuffer(commandBuffer);
+-    commandBuffer->barriersBufferImage(
+-        {vk::CommandBuffer::BufferMemoryBarrier{
+-            .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+-            .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+-            .dstStageMask = VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
+-            .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT,
+-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+-            .buffer = rhitSBT_,
+-        }},
+-        {});
++        rhitSBT_->uploadToStagingBuffer(cachedRhitSBT.data());
++        rhitSBT_->uploadToBuffer(commandBuffer);
++        cachedHitGroupIndices_ = hitGroupIndices;
++        commandBuffer->barriersBufferImage(
++            {vk::CommandBuffer::BufferMemoryBarrier{
++                .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
++                .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
++                .dstStageMask = VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR,
++                .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT,
++                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
++                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
++                .buffer = rhitSBT_,
++            }},
++            {});
++    }
+ 
+     hitRegion_.deviceAddress = rhitSBT_->bufferAddress();
+     hitRegion_.stride = alignedHandleSize_;
+diff --git a/src/core/vulkan/sbt.hpp b/src/core/vulkan/sbt.hpp
+index 81eb5d8..b533102 100644
+--- a/src/core/vulkan/sbt.hpp
++++ b/src/core/vulkan/sbt.hpp
+@@ -49,5 +49,6 @@ class SBT : public SharedObject<SBT> {
+     std::shared_ptr<DeviceLocalBuffer> rgenSBT_;
+     std::shared_ptr<DeviceLocalBuffer> rmissSBT_;
+     std::shared_ptr<DeviceLocalBuffer> rhitSBT_;
++    std::vector<uint32_t> cachedHitGroupIndices_;
+ };
+ }; // namespace vk

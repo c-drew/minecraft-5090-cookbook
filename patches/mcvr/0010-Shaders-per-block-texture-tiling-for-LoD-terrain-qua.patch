@@ -1,0 +1,268 @@
+From 1c5a1fccdcc8a946a47b7239bb9fbdb06b576acb Mon Sep 17 00:00:00 2001
+From: c-drew <101952850+c-drew@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 23:13:13 -0400
+Subject: [PATCH 10/10] Shaders: per-block texture tiling for LoD terrain quads
+
+LoD terrain draws one quad per 2^L-block voxel with the block's sprite spread across it and
+stores the voxel size in blocks in glintUV.x (block faces never use glint; glint reads are
+gated on USE_GLINT_BIT). Hit shaders repeat the sprite once per block and scale the ray-cone
+derivatives to match, so far terrain has block-sized texels and leaf cut-outs.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_014aGN7pt3GAnXQRSSREgQzx
+---
+ src/shader/util/vertex.glsl                   | 20 +++++++++++++++++++
+ .../internal/advanced/common/default.rahit    |  5 +++++
+ .../internal/advanced/common/shadow.rahit     |  5 +++++
+ .../advanced/common/transparent_only.rchit    |  1 +
+ .../advanced/common/world_no_reflect.rchit    |  5 +++++
+ .../internal/advanced/primary/default.rchit   |  5 +++++
+ .../internal/advanced/primary/no_height.rchit |  5 +++++
+ .../internal/advanced/world/default.rchit     |  5 +++++
+ .../internal/advanced/world/no_height.rchit   |  5 +++++
+ 9 files changed, 56 insertions(+)
+
+diff --git a/src/shader/util/vertex.glsl b/src/shader/util/vertex.glsl
+index 669fad3..419142e 100644
+--- a/src/shader/util/vertex.glsl
++++ b/src/shader/util/vertex.glsl
+@@ -67,6 +67,26 @@ bool hasNoHeightSurface(uint packedData) {
+     return (packedData & NO_HEIGHT_SURFACE_BIT) != 0u;
+ }
+ 
++// RTX 5090 fork: LoD terrain (the Radiance build of Voxy) draws one quad per 2^L-block voxel with
++// the block's sprite spread across it, and stores the voxel size in blocks in glintUV.x (block
++// faces never use glint, and every glint read is gated on USE_GLINT_BIT). Repeat the sprite once
++// per block, like vanilla terrain, instead of stretching it: no magnified texels, and leaf
++// cut-outs stay leaf-sized instead of opening holes several blocks wide.
++float lodTileCount(MaterialVertex m0, uint packedData) {
++    return hasGlint(packedData) ? 1.0 : max(m0.glintUV.x, 1.0);
++}
++
++// The quad's UVs span exactly one sprite, so the triangle's UV bounds are the sprite bounds.
++vec2 lodTileUv(vec2 uv, vec2 uv0, vec2 uv1, vec2 uv2, float tiles) {
++    if (tiles <= 1.0) {
++        return uv;
++    }
++    vec2 uvMin = min(uv0, min(uv1, uv2));
++    vec2 span = max(uv0, max(uv1, uv2)) - uvMin;
++    vec2 local = (uv - uvMin) / max(span, vec2(1e-12));
++    return uvMin + fract(local * tiles) * span;
++}
++
+ uint getAlphaMode(uint packedData) {
+     return (packedData >> ALPHA_MODE_SHIFT) & 0xFu;
+ }
+diff --git a/src/shader/world/ray_tracing/internal/advanced/common/default.rahit b/src/shader/world/ray_tracing/internal/advanced/common/default.rahit
+index 05074f0..80c814d 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/common/default.rahit
++++ b/src/shader/world/ray_tracing/internal/advanced/common/default.rahit
+@@ -45,6 +45,7 @@ layout(location = 0) rayPayloadInEXT MainRay mainRay;
+ hitAttributeEXT vec2 attribs;
+ 
+ void main() {
++    float lodTiles = 1.0; // RTX 5090 fork: LoD per-block tiling (util/vertex.glsl)
+     uint instanceID = gl_InstanceCustomIndexEXT;
+     uint geometryID = gl_GeometryIndexEXT;
+     uint geometryBufferIndex = getGeometryBufferIndex(instanceID, geometryID);
+@@ -66,12 +67,16 @@ void main() {
+     float lod = 0.0;
+     if (hasTexture(packedData)) {
+         uv = baryCoords.x * m0.textureUV + baryCoords.y * m1.textureUV + baryCoords.z * m2.textureUV;
++        lodTiles = lodTileCount(m0, m0.packedData);
++        uv = lodTileUv(uv, m0.textureUV, m1.textureUV, m2.textureUV, lodTiles);
+ 
+         float coneRadiusWorld = mainRay.coneWidth + gl_HitTEXT * mainRay.coneSpread;
+         PositionVertex p0, p1, p2;
+         loadTrianglePositions(geometryBufferIndex, i0, i1, i2, p0, p1, p2);
+         vec3 dposdu, dposdv;
+         computedposduDv(p0.pos, p1.pos, p2.pos, m0.textureUV, m1.textureUV, m2.textureUV, dposdu, dposdv);
++        dposdu /= lodTiles;
++        dposdv /= lodTiles;
+         lod = lodWithCone(textures[nonuniformEXT(textureID)], uv, coneRadiusWorld, dposdu, dposdv);
+ 
+         alpha *= sampleTexture(textures[nonuniformEXT(textureID)], uv, lod, false).a;
+diff --git a/src/shader/world/ray_tracing/internal/advanced/common/shadow.rahit b/src/shader/world/ray_tracing/internal/advanced/common/shadow.rahit
+index 60bd9d8..116d9ad 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/common/shadow.rahit
++++ b/src/shader/world/ray_tracing/internal/advanced/common/shadow.rahit
+@@ -47,6 +47,7 @@ layout(location = 1) rayPayloadInEXT ShadowRay shadowRay;
+ hitAttributeEXT vec2 attribs;
+ 
+ void main() {
++    float lodTiles = 1.0; // RTX 5090 fork: LoD per-block tiling (util/vertex.glsl)
+     uint instanceID = gl_InstanceCustomIndexEXT;
+     uint geometryID = gl_GeometryIndexEXT;
+     uint geometryBufferIndex = getGeometryBufferIndex(instanceID, geometryID);
+@@ -70,6 +71,8 @@ void main() {
+ 
+     if (hasTexture(packedData)) {
+         textureUV = baryCoords.x * m0.textureUV + baryCoords.y * m1.textureUV + baryCoords.z * m2.textureUV;
++        lodTiles = lodTileCount(m0, m0.packedData);
++        textureUV = lodTileUv(textureUV, m0.textureUV, m1.textureUV, m2.textureUV, lodTiles);
+         albedo = sampleTexture(textures[nonuniformEXT(textureID)], textureUV, false);
+     }
+     ivec4 flags = ivec4(0);
+@@ -134,6 +137,8 @@ void main() {
+             vec3 dposdv;
+             mat3 objectToWorld = mat3(gl_ObjectToWorld3x4EXT);
+             computedposduDv(p0.pos, p1.pos, p2.pos, m0.textureUV, m1.textureUV, m2.textureUV, dposdu, dposdv);
++            dposdu /= lodTiles;
++            dposdv /= lodTiles;
+             vec3 dPduWorld = objectToWorld * dposdu;
+             vec3 dPdvWorld = objectToWorld * dposdv;
+             vec3 worldNormal =
+diff --git a/src/shader/world/ray_tracing/internal/advanced/common/transparent_only.rchit b/src/shader/world/ray_tracing/internal/advanced/common/transparent_only.rchit
+index bde65ae..971da1d 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/common/transparent_only.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/common/transparent_only.rchit
+@@ -94,6 +94,7 @@ void main() {
+     float pbrEmission = 0.0;
+     if (hasTexture(m0.packedData)) {
+         vec2 uv = bary.x * m0.textureUV + bary.y * m1.textureUV + bary.z * m2.textureUV;
++        uv = lodTileUv(uv, m0.textureUV, m1.textureUV, m2.textureUV, lodTileCount(m0, m0.packedData)); // RTX 5090 fork
+         albedo = sampleTexture(textures[nonuniformEXT(m0.textureID)], uv, 0.0, false);
+ 
+         int specularTextureID = mapping.entries[m0.textureID].specular;
+diff --git a/src/shader/world/ray_tracing/internal/advanced/common/world_no_reflect.rchit b/src/shader/world/ray_tracing/internal/advanced/common/world_no_reflect.rchit
+index 19ad33c..b4750f7 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/common/world_no_reflect.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/common/world_no_reflect.rchit
+@@ -72,6 +72,7 @@ layout(location = 0) rayPayloadInEXT MainRay mainRay;
+ hitAttributeEXT vec2 attribs;
+ 
+ void main() {
++    float lodTiles = 1.0; // RTX 5090 fork: LoD per-block tiling (util/vertex.glsl)
+     vec3 viewDir = -mainRay.direction;
+ 
+     uint instanceID = gl_InstanceCustomIndexEXT;
+@@ -122,6 +123,8 @@ void main() {
+         int specularTextureID = mapping.entries[textureID].specular;
+         int normalTextureID = mapping.entries[textureID].normal;
+         textureUV = baryCoords.x * m0.textureUV + baryCoords.y * m1.textureUV + baryCoords.z * m2.textureUV;
++        lodTiles = lodTileCount(m0, m0.packedData);
++        textureUV = lodTileUv(textureUV, m0.textureUV, m1.textureUV, m2.textureUV, lodTiles);
+         vec2 atlasUvMin = min(m0.textureUV, min(m1.textureUV, m2.textureUV));
+         vec2 atlasUvMax = max(m0.textureUV, max(m1.textureUV, m2.textureUV));
+ 
+@@ -129,6 +132,8 @@ void main() {
+         float coneRadiusWorld = mainRay.coneWidth + gl_HitTEXT * mainRay.coneSpread;
+         vec3 dposdu, dposdv;
+         computedposduDv(p0.pos, p1.pos, p2.pos, m0.textureUV, m1.textureUV, m2.textureUV, dposdu, dposdv);
++        dposdu /= lodTiles;
++        dposdv /= lodTiles;
+         float lod = lodWithCone(textures[nonuniformEXT(textureID)], textureUV, coneRadiusWorld, dposdu, dposdv);
+ 
+         albedoValue = sampleTexture(textures[nonuniformEXT(textureID)], textureUV, lod, false);
+diff --git a/src/shader/world/ray_tracing/internal/advanced/primary/default.rchit b/src/shader/world/ray_tracing/internal/advanced/primary/default.rchit
+index dd4a29e..b498dfc 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/primary/default.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/primary/default.rchit
+@@ -88,6 +88,7 @@ bool loadPreviousScenePos(uint geometryBufferIndex, uint primitiveID, vec3 baryC
+ }
+ 
+ void main() {
++    float lodTiles = 1.0; // RTX 5090 fork: LoD per-block tiling (util/vertex.glsl)
+     uint instanceID = gl_InstanceCustomIndexEXT;
+     uint geometryID = gl_GeometryIndexEXT;
+     uint geometryBufferIndex = getGeometryBufferIndex(instanceID, geometryID);
+@@ -138,11 +139,15 @@ void main() {
+     if (useTexture) {
+         textureMap = mapping.entries[textureID];
+         textureUV = baryCoords.x * m0.textureUV + baryCoords.y * m1.textureUV + baryCoords.z * m2.textureUV;
++        lodTiles = lodTileCount(m0, m0.packedData);
++        textureUV = lodTileUv(textureUV, m0.textureUV, m1.textureUV, m2.textureUV, lodTiles);
+         atlasUvMin = min(m0.textureUV, min(m1.textureUV, m2.textureUV));
+         atlasUvMax = max(m0.textureUV, max(m1.textureUV, m2.textureUV));
+ 
+         float coneRadiusWorld = mainRay.coneWidth + gl_HitTEXT * mainRay.coneSpread;
+         computedposduDv(p0.pos, p1.pos, p2.pos, m0.textureUV, m1.textureUV, m2.textureUV, dposdu, dposdv);
++        dposdu /= lodTiles;
++        dposdv /= lodTiles;
+         lod = lodWithCone(textures[nonuniformEXT(textureID)], textureUV, coneRadiusWorld, dposdu, dposdv);
+ 
+         dPduWorld = objectToWorld * dposdu;
+diff --git a/src/shader/world/ray_tracing/internal/advanced/primary/no_height.rchit b/src/shader/world/ray_tracing/internal/advanced/primary/no_height.rchit
+index 4fabfea..4e3658d 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/primary/no_height.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/primary/no_height.rchit
+@@ -88,6 +88,7 @@ bool loadPreviousScenePos(uint geometryBufferIndex, uint primitiveID, vec3 baryC
+ }
+ 
+ void main() {
++    float lodTiles = 1.0; // RTX 5090 fork: LoD per-block tiling (util/vertex.glsl)
+     uint instanceID = gl_InstanceCustomIndexEXT;
+     uint geometryID = gl_GeometryIndexEXT;
+     uint geometryBufferIndex = getGeometryBufferIndex(instanceID, geometryID);
+@@ -138,11 +139,15 @@ void main() {
+     if (useTexture) {
+         textureMap = mapping.entries[textureID];
+         textureUV = baryCoords.x * m0.textureUV + baryCoords.y * m1.textureUV + baryCoords.z * m2.textureUV;
++        lodTiles = lodTileCount(m0, m0.packedData);
++        textureUV = lodTileUv(textureUV, m0.textureUV, m1.textureUV, m2.textureUV, lodTiles);
+         atlasUvMin = min(m0.textureUV, min(m1.textureUV, m2.textureUV));
+         atlasUvMax = max(m0.textureUV, max(m1.textureUV, m2.textureUV));
+ 
+         float coneRadiusWorld = mainRay.coneWidth + gl_HitTEXT * mainRay.coneSpread;
+         computedposduDv(p0.pos, p1.pos, p2.pos, m0.textureUV, m1.textureUV, m2.textureUV, dposdu, dposdv);
++        dposdu /= lodTiles;
++        dposdv /= lodTiles;
+         lod = lodWithCone(textures[nonuniformEXT(textureID)], textureUV, coneRadiusWorld, dposdu, dposdv);
+ 
+         dPduWorld = objectToWorld * dposdu;
+diff --git a/src/shader/world/ray_tracing/internal/advanced/world/default.rchit b/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
+index b085386..b3faa01 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
+@@ -458,6 +458,7 @@ bool loadPreviousScenePos(uint geometryBufferIndex, uint primitiveID, vec3 baryC
+ }
+ 
+ void main() {
++    float lodTiles = 1.0; // RTX 5090 fork: LoD per-block tiling (util/vertex.glsl)
+     uint instanceID = gl_InstanceCustomIndexEXT;
+     uint geometryID = gl_GeometryIndexEXT;
+     uint geometryBufferIndex = getGeometryBufferIndex(instanceID, geometryID);
+@@ -514,11 +515,15 @@ void main() {
+     if (useTexture) {
+         textureMap = mapping.entries[textureID];
+         textureUV = baryCoords.x * m0.textureUV + baryCoords.y * m1.textureUV + baryCoords.z * m2.textureUV;
++        lodTiles = lodTileCount(m0, m0.packedData);
++        textureUV = lodTileUv(textureUV, m0.textureUV, m1.textureUV, m2.textureUV, lodTiles);
+         atlasUvMin = min(m0.textureUV, min(m1.textureUV, m2.textureUV));
+         atlasUvMax = max(m0.textureUV, max(m1.textureUV, m2.textureUV));
+ 
+         float coneRadiusWorld = mainRay.coneWidth + gl_HitTEXT * mainRay.coneSpread;
+         computedposduDv(p0.pos, p1.pos, p2.pos, m0.textureUV, m1.textureUV, m2.textureUV, dposdu, dposdv);
++        dposdu /= lodTiles;
++        dposdv /= lodTiles;
+         lod = lodWithCone(textures[nonuniformEXT(textureID)], textureUV, coneRadiusWorld, dposdu, dposdv);
+ 
+         dPduWorld = objectToWorld * dposdu;
+diff --git a/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit b/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
+index b085386..b3faa01 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
+@@ -458,6 +458,7 @@ bool loadPreviousScenePos(uint geometryBufferIndex, uint primitiveID, vec3 baryC
+ }
+ 
+ void main() {
++    float lodTiles = 1.0; // RTX 5090 fork: LoD per-block tiling (util/vertex.glsl)
+     uint instanceID = gl_InstanceCustomIndexEXT;
+     uint geometryID = gl_GeometryIndexEXT;
+     uint geometryBufferIndex = getGeometryBufferIndex(instanceID, geometryID);
+@@ -514,11 +515,15 @@ void main() {
+     if (useTexture) {
+         textureMap = mapping.entries[textureID];
+         textureUV = baryCoords.x * m0.textureUV + baryCoords.y * m1.textureUV + baryCoords.z * m2.textureUV;
++        lodTiles = lodTileCount(m0, m0.packedData);
++        textureUV = lodTileUv(textureUV, m0.textureUV, m1.textureUV, m2.textureUV, lodTiles);
+         atlasUvMin = min(m0.textureUV, min(m1.textureUV, m2.textureUV));
+         atlasUvMax = max(m0.textureUV, max(m1.textureUV, m2.textureUV));
+ 
+         float coneRadiusWorld = mainRay.coneWidth + gl_HitTEXT * mainRay.coneSpread;
+         computedposduDv(p0.pos, p1.pos, p2.pos, m0.textureUV, m1.textureUV, m2.textureUV, dposdu, dposdv);
++        dposdu /= lodTiles;
++        dposdv /= lodTiles;
+         lod = lodWithCone(textures[nonuniformEXT(textureID)], textureUV, coneRadiusWorld, dposdu, dposdv);
+ 
+         dPduWorld = objectToWorld * dposdu;

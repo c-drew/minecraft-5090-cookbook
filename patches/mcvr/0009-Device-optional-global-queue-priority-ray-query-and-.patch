@@ -1,0 +1,253 @@
+From 750487568c634ce3cd1ee4324e9f0a0bf9983e58 Mon Sep 17 00:00:00 2001
+From: c-drew <101952850+c-drew@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 23:13:13 -0400
+Subject: [PATCH 09/10] Device: optional global queue priority, ray query and
+ SER capability plumbing
+
+MCVR_QUEUE_PRIORITY=high|realtime|low requests VK_KHR_global_priority for the game's queues
+and falls back to the default if the driver refuses (NVIDIA refuses HIGH without
+CAP_SYS_NICE). Ray query and NV ray tracing invocation reorder are enabled when present and
+exposed to shaders as MCVR_DEVICE_/MCVR_COMPILER_RAY_TRACING_INVOCATION_REORDER defines; the
+shipped shaders do not use SER (tested: +4% outdoors, -3% at a lit base).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_014aGN7pt3GAnXQRSSREgQzx
+---
+ .../modules/world/shader_pack/shader_pack.cpp | 16 +++-
+ src/core/vulkan/device.cpp                    | 77 ++++++++++++++++++-
+ src/core/vulkan/device.hpp                    |  2 +
+ 3 files changed, 90 insertions(+), 5 deletions(-)
+
+diff --git a/src/core/render/modules/world/shader_pack/shader_pack.cpp b/src/core/render/modules/world/shader_pack/shader_pack.cpp
+index 90f640a..d94c2fa 100644
+--- a/src/core/render/modules/world/shader_pack/shader_pack.cpp
++++ b/src/core/render/modules/world/shader_pack/shader_pack.cpp
+@@ -1994,6 +1994,17 @@ void ShaderPack::preClose() {
+     referenceHeight_ = 0;
+ }
+ 
++// Device capabilities shaders may branch on at compile time.
++static void addDeviceCapabilityDefinitions(std::unordered_map<std::string, std::string> &definitions,
++                                           const vk::Device &device) {
++    definitions["MCVR_DEVICE_RAY_TRACING_INVOCATION_REORDER"] = device.hasRayTracingInvocationReorder() ? "1" : "0";
++#ifdef MCVR_ENABLE_SHADER_INVOCATION_REORDER_GLSL
++    definitions["MCVR_COMPILER_RAY_TRACING_INVOCATION_REORDER"] = "1";
++#else
++    definitions["MCVR_COMPILER_RAY_TRACING_INVOCATION_REORDER"] = "0";
++#endif
++}
++
+ std::shared_ptr<vk::Shader> ShaderPack::createShader(
+     std::shared_ptr<vk::Device> device,
+     const std::filesystem::path &path,
+@@ -2002,8 +2013,10 @@ std::shared_ptr<vk::Shader> ShaderPack::createShader(
+     ShaderPackLoader::Stage executionStage,
+     uint32_t executionSet) const {
+     const std::filesystem::path cacheDir = Renderer::folderPath / "cache/shaders";
++    auto definitionsWithDeviceCaps = mergeDefinitions(shaderAttributes_, definitions);
++    addDeviceCapabilityDefinitions(definitionsWithDeviceCaps, *device);
+     auto compileResult = vk::Shader::compileGlslToSpv(
+-        path.string(), stage, mergeDefinitions(shaderAttributes_, definitions),
++        path.string(), stage, definitionsWithDeviceCaps,
+         shaderPack_.includeDirectories, executionSource(executionStage, executionSet), cacheDir);
+     return vk::Shader::create(device, std::move(compileResult));
+ }
+@@ -2221,6 +2234,7 @@ ShaderPack::createShaders(std::shared_ptr<vk::Device> device,
+         filteredRequestAttributes[i] = filterShaderAttributes(
+             shaderAttributes_, requests[i].path, attributeKeys, includeDirectories, dependencyCache);
+         requestDefinitions[i] = stripAttributeDefinitions(requests[i].definitions, attributeKeys);
++        addDeviceCapabilityDefinitions(requestDefinitions[i], *device);
+         executionSources[i] = executionSource(requests[i].executionStage, requests[i].executionSet);
+         ShaderCreateInfo request = requests[i];
+         request.definitions = requestDefinitions[i];
+diff --git a/src/core/vulkan/device.cpp b/src/core/vulkan/device.cpp
+index 6ab35fb..9c70a89 100644
+--- a/src/core/vulkan/device.cpp
++++ b/src/core/vulkan/device.cpp
+@@ -1,3 +1,4 @@
++#include "core/util/fork_config.hpp"
+ #include "core/vulkan/device.hpp"
+ 
+ #include "core/render/modules/world/dlss/dlss_wrapper.hpp"
+@@ -5,6 +6,7 @@
+ #include "core/vulkan/instance.hpp"
+ #include "core/vulkan/physical_device.hpp"
+ 
++#include <cstdlib>
+ #include <cstring>
+ #include <iostream>
+ #include <unordered_set>
+@@ -27,6 +29,8 @@ vk::Device::Device(std::shared_ptr<Instance> instance,
+         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+         VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+         VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
++        VK_KHR_RAY_QUERY_EXTENSION_NAME,
++        VK_NV_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME,
+         VK_KHR_SPIRV_1_4_EXTENSION_NAME,
+         VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+         VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
+@@ -124,6 +128,18 @@ vk::Device::Device(std::shared_ptr<Instance> instance,
+     }
+ #endif
+ 
++    // RTX 5090 fork: MCVR_QUEUE_PRIORITY=high|realtime|low asks the driver for a global queue priority,
++    // so the desktop compositor (or anything else drawing) preempts the game's frames less.
++    VkQueueGlobalPriorityKHR globalPriority = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR;
++    if (const char *v = mcvr_fork::setting("MCVR_QUEUE_PRIORITY")) {
++        if (std::strcmp(v, "high") == 0) globalPriority = VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR;
++        else if (std::strcmp(v, "realtime") == 0) globalPriority = VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR;
++        else if (std::strcmp(v, "low") == 0) globalPriority = VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR;
++    }
++    if (globalPriority != VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR) {
++        enabledExtensions.push_back(VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME);
++    }
++
+     std::vector<const char *> filteredExtensions;
+     filteredExtensions.reserve(enabledExtensions.size());
+     std::unordered_set<std::string> seenExtensions;
+@@ -135,6 +151,26 @@ vk::Device::Device(std::shared_ptr<Instance> instance,
+         if (!seenExtensions.insert(ext).second) { continue; }
+         filteredExtensions.push_back(ext);
+     }
++    if (!seenExtensions.count(VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME)) {
++        globalPriority = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR;
++    }
++    VkDeviceQueueGlobalPriorityCreateInfoKHR globalPriorityInfo{};
++    globalPriorityInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_KHR;
++    globalPriorityInfo.globalPriority = globalPriority;
++    const void *queuePriorityNext = globalPriority != VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR ? &globalPriorityInfo : nullptr;
++    // Creates the device; if the driver refuses the priority (not permitted), retries without it.
++    auto createDevice = [&](VkDeviceCreateInfo &info, VkDeviceQueueCreateInfo *queues, uint32_t count) {
++        VkResult result = vkCreateDevice(physicalDevice_->vkPhysicalDevice(), &info, nullptr, &device_);
++        if (result != VK_SUCCESS && queuePriorityNext != nullptr) {
++            deviceCerr() << "global queue priority " << globalPriority << " refused (" << result
++                         << "), using the default" << std::endl;
++            for (uint32_t i = 0; i < count; i++) queues[i].pNext = nullptr;
++            result = vkCreateDevice(physicalDevice_->vkPhysicalDevice(), &info, nullptr, &device_);
++        } else if (result == VK_SUCCESS && queuePriorityNext != nullptr) {
++            deviceCerr() << "global queue priority " << globalPriority << " enabled" << std::endl;
++        }
++        return result;
++    };
+ 
+ #ifdef DEBUG
+     deviceCout() << "selected instance extensions:" << std::endl;
+@@ -178,9 +214,18 @@ vk::Device::Device(std::shared_ptr<Instance> instance,
+         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+     supportedAccelerationStructureFeatures.pNext = &supportedVulkan12;
+ 
++    VkPhysicalDeviceRayQueryFeaturesKHR supportedRayQueryFeatures{};
++    supportedRayQueryFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
++    supportedRayQueryFeatures.pNext = &supportedAccelerationStructureFeatures;
++
++    VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV supportedRayTracingInvocationReorderFeatures{};
++    supportedRayTracingInvocationReorderFeatures.sType =
++        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_NV;
++    supportedRayTracingInvocationReorderFeatures.pNext = &supportedRayQueryFeatures;
++
+     VkPhysicalDeviceRayTracingPipelineFeaturesKHR supportedRayTracingFeatures{};
+     supportedRayTracingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+-    supportedRayTracingFeatures.pNext = &supportedAccelerationStructureFeatures;
++    supportedRayTracingFeatures.pNext = &supportedRayTracingInvocationReorderFeatures;
+ 
+     VkPhysicalDeviceFeatures2 supportedFeatures2{};
+     supportedFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+@@ -303,9 +348,26 @@ vk::Device::Device(std::shared_ptr<Instance> instance,
+             supportedAccelerationStructureFeatures.descriptorBindingAccelerationStructureUpdateAfterBind;
+     }
+ 
++    VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {};
++    rayQueryFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
++    rayQueryFeatures.pNext = &accelerationStructureFeatures;
++    if (hasExtension(VK_KHR_RAY_QUERY_EXTENSION_NAME)) {
++        rayQueryFeatures.rayQuery = supportedRayQueryFeatures.rayQuery;
++    }
++
++    VkPhysicalDeviceRayTracingInvocationReorderFeaturesNV rayTracingInvocationReorderFeatures = {};
++    rayTracingInvocationReorderFeatures.sType =
++        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_INVOCATION_REORDER_FEATURES_NV;
++    rayTracingInvocationReorderFeatures.pNext = &rayQueryFeatures;
++    if (hasExtension(VK_NV_RAY_TRACING_INVOCATION_REORDER_EXTENSION_NAME)) {
++        rayTracingInvocationReorderFeatures.rayTracingInvocationReorder =
++            supportedRayTracingInvocationReorderFeatures.rayTracingInvocationReorder;
++    }
++    rayTracingInvocationReorder_ = rayTracingInvocationReorderFeatures.rayTracingInvocationReorder == VK_TRUE;
++
+     VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingFeatures = {};
+     rayTracingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+-    rayTracingFeatures.pNext = &accelerationStructureFeatures;
++    rayTracingFeatures.pNext = &rayTracingInvocationReorderFeatures;
+     if (hasExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) {
+         rayTracingFeatures.rayTracingPipeline = supportedRayTracingFeatures.rayTracingPipeline;
+     }
+@@ -348,6 +410,7 @@ vk::Device::Device(std::shared_ptr<Instance> instance,
+         queueCreateInfo.queueFamilyIndex = physicalDevice_->mainQueueIndex();
+         queueCreateInfo.queueCount = 2;
+         queueCreateInfo.pQueuePriorities = queuePriorities.data();
++        queueCreateInfo.pNext = queuePriorityNext;
+ 
+         deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+         deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
+@@ -357,7 +420,7 @@ vk::Device::Device(std::shared_ptr<Instance> instance,
+         deviceCreateInfo.pNext = &features2;
+         deviceCreateInfo.pEnabledFeatures = nullptr;
+ 
+-        if (vkCreateDevice(physicalDevice_->vkPhysicalDevice(), &deviceCreateInfo, nullptr, &device_) != VK_SUCCESS) {
++        if (createDevice(deviceCreateInfo, &queueCreateInfo, 1) != VK_SUCCESS) {
+             deviceCerr() << "Failed to create logical device!" << std::endl;
+             exit(EXIT_FAILURE);
+         }
+@@ -368,11 +431,13 @@ vk::Device::Device(std::shared_ptr<Instance> instance,
+         queueCreateInfos[0].queueFamilyIndex = physicalDevice_->mainQueueIndex();
+         queueCreateInfos[0].queueCount = 1;
+         queueCreateInfos[0].pQueuePriorities = &queuePriorities[0];
++        queueCreateInfos[0].pNext = queuePriorityNext;
+ 
+         queueCreateInfos[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+         queueCreateInfos[1].queueFamilyIndex = physicalDevice_->secondaryQueueIndex();
+         queueCreateInfos[1].queueCount = 1;
+         queueCreateInfos[1].pQueuePriorities = &queuePriorities[1];
++        queueCreateInfos[1].pNext = queuePriorityNext;
+ 
+         deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+         deviceCreateInfo.queueCreateInfoCount = queueCreateInfos.size();
+@@ -382,7 +447,7 @@ vk::Device::Device(std::shared_ptr<Instance> instance,
+         deviceCreateInfo.pNext = &features2;
+         deviceCreateInfo.pEnabledFeatures = nullptr;
+ 
+-        if (vkCreateDevice(physicalDevice_->vkPhysicalDevice(), &deviceCreateInfo, nullptr, &device_) != VK_SUCCESS) {
++        if (createDevice(deviceCreateInfo, queueCreateInfos.data(), (uint32_t)queueCreateInfos.size()) != VK_SUCCESS) {
+             deviceCerr() << "Failed to create logical device!" << std::endl;
+             exit(EXIT_FAILURE);
+         }
+@@ -428,6 +493,10 @@ bool vk::Device::hasExtendedDynamicState2LogicOp() const {
+     return extendedDynamicState2LogicOp_;
+ }
+ 
++bool vk::Device::hasRayTracingInvocationReorder() const {
++    return rayTracingInvocationReorder_;
++}
++
+ bool vk::Device::isDlssDeviceExtensionsCompatible() const {
+     return dlssDeviceExtensionsCompatible_;
+ }
+diff --git a/src/core/vulkan/device.hpp b/src/core/vulkan/device.hpp
+index 89abc60..a79d66d 100644
+--- a/src/core/vulkan/device.hpp
++++ b/src/core/vulkan/device.hpp
+@@ -19,6 +19,7 @@ class Device : public SharedObject<Device> {
+     VkQueue &secondaryQueue();
+ 
+     bool hasExtendedDynamicState2LogicOp() const;
++    bool hasRayTracingInvocationReorder() const;
+     bool isDlssDeviceExtensionsCompatible() const;
+     bool isXessDeviceExtensionsCompatible() const;
+ 
+@@ -32,6 +33,7 @@ class Device : public SharedObject<Device> {
+     VkQueue secondaryQueue_ = VK_NULL_HANDLE;
+ 
+     bool extendedDynamicState2LogicOp_ = false;
++    bool rayTracingInvocationReorder_ = false;
+     bool dlssDeviceExtensionsCompatible_ = false;
+     bool xessDeviceExtensionsCompatible_ = false;
+ };

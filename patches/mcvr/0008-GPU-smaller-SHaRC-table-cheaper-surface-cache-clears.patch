@@ -1,0 +1,118 @@
+From b7a534b77dc91ecea66761ef4d70b48efb0363dd Mon Sep 17 00:00:00 2001
+From: c-drew <101952850+c-drew@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 23:13:13 -0400
+Subject: [PATCH 08/10] GPU: smaller SHaRC table, cheaper surface-cache clears,
+ continuation early-out
+
+- SHaRC capacity 4M entries (was 8M); the resolve pass walks the whole table every frame
+  (0.17 ms at 8M). MCVR_SHARC_CAPACITY_LOG2 overrides it.
+- Surface caches are valid only when layer 7.w holds the valid flag, so clearing writes that
+  one layer instead of eight, and the secondary cache is cleared only for sky pixels.
+- Continuation reflection/refraction passes return early for pixels whose first hit is not
+  transparent, before loading and re-shading both surface caches.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_014aGN7pt3GAnXQRSSREgQzx
+---
+ .../world/ray_tracing/ray_tracing_module.hpp  |  8 +++++++-
+ .../internal/advanced/primary/primary.rgen    | 20 +++++--------------
+ .../internal/advanced/world/world.rgen        | 17 ++++++++++++++++
+ 3 files changed, 29 insertions(+), 16 deletions(-)
+
+diff --git a/src/core/render/modules/world/ray_tracing/ray_tracing_module.hpp b/src/core/render/modules/world/ray_tracing/ray_tracing_module.hpp
+index e5075e0..70905e9 100644
+--- a/src/core/render/modules/world/ray_tracing/ray_tracing_module.hpp
++++ b/src/core/render/modules/world/ray_tracing/ray_tracing_module.hpp
+@@ -80,7 +80,13 @@ class RayTracingModule : public WorldModule, public SharedObject<RayTracingModul
+     void preClose() override;
+ 
+   private:
+-    constexpr static uint32_t sharcCapacity = 1u << 23;
++    // RTX 5090 fork: 4M entries (was 8M). The resolve pass walks the whole table every frame
++    // (0.17 ms at 8M); MCVR_SHARC_CAPACITY_LOG2 overrides it for measurements.
++    inline static const uint32_t sharcCapacity = [] {
++        const char *v = mcvr_fork::setting("MCVR_SHARC_CAPACITY_LOG2");
++        int log2 = v != nullptr ? std::atoi(v) : 22;
++        return 1u << std::clamp(log2, 16, 24);
++    }();
+     constexpr static uint32_t sharcResolveWorkgroupSize = 64;
+     constexpr static uint32_t executionLoopLimit = 1u << 16;
+ 
+diff --git a/src/shader/world/ray_tracing/internal/advanced/primary/primary.rgen b/src/shader/world/ray_tracing/internal/advanced/primary/primary.rgen
+index 12af1b0..e3307cd 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/primary/primary.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/primary/primary.rgen
+@@ -114,25 +114,14 @@ void storePrimaryRayScratch(ivec2 pixel, MainRay rayState, int startBounce, bool
+                                isHand);
+ }
+ 
++// RTX 5090 fork: a cache entry is valid only when layer 7.w holds the valid flag (every reader goes
++// through decodeSurfaceCache or checks the pixel's reservoir, which is empty for invalid entries), so
++// clearing writes that one layer instead of all eight.
+ void clearPrimarySurfaceCache(ivec2 pixel) {
+-    storePrimarySurfaceCacheLayer(pixel, 0, vec4(0.0));
+-    storePrimarySurfaceCacheLayer(pixel, 1, vec4(0.0));
+-    storePrimarySurfaceCacheLayer(pixel, 2, vec4(0.0));
+-    storePrimarySurfaceCacheLayer(pixel, 3, vec4(0.0));
+-    storePrimarySurfaceCacheLayer(pixel, 4, vec4(ADV_SURFACE_CACHE_INVALID_FLAG));
+-    storePrimarySurfaceCacheLayer(pixel, 5, vec4(0.0));
+-    storePrimarySurfaceCacheLayer(pixel, 6, vec4(0.0));
+     storePrimarySurfaceCacheLayer(pixel, 7, vec4(0.0, 0.0, 0.0, ADV_SURFACE_CACHE_INVALID_FLAG));
+ }
+ 
+ void clearSecondarySurfaceCache(ivec2 pixel) {
+-    storeSecondarySurfaceCacheLayer(pixel, 0, vec4(0.0));
+-    storeSecondarySurfaceCacheLayer(pixel, 1, vec4(0.0));
+-    storeSecondarySurfaceCacheLayer(pixel, 2, vec4(0.0));
+-    storeSecondarySurfaceCacheLayer(pixel, 3, vec4(0.0));
+-    storeSecondarySurfaceCacheLayer(pixel, 4, vec4(ADV_SURFACE_CACHE_INVALID_FLAG));
+-    storeSecondarySurfaceCacheLayer(pixel, 5, vec4(0.0));
+-    storeSecondarySurfaceCacheLayer(pixel, 6, vec4(0.0));
+     storeSecondarySurfaceCacheLayer(pixel, 7, vec4(0.0, 0.0, 0.0, ADV_SURFACE_CACHE_INVALID_FLAG));
+ }
+ 
+@@ -273,7 +262,6 @@ void main() {
+     vec2 pixelCenter = vec2(pixel) + 0.5;
+     pixelCenter += worldUBO.cameraJitter;
+     clearPrimarySurfaceCache(pixel);
+-    clearSecondarySurfaceCache(pixel);
+ 
+     float fovY = fovYFromProj(worldUBO.cameraProjMat);
+     float fovX = fovXFromProj(worldUBO.cameraProjMat);
+@@ -342,6 +330,8 @@ void main() {
+     if (!hitSky) {
+         primaryHitMat = rayLoadMaterial(primaryContinuationRay);
+         copyPrimarySurfaceCacheToSecondary(pixel);
++    } else {
++        clearSecondarySurfaceCache(pixel);
+     }
+     bool shouldTraceSecondary = !hitSky && primaryHitMat.transmission > EPS;
+ 
+diff --git a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+index 4d0bd6c..978e37d 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+@@ -1010,6 +1010,23 @@ void main() {
+ #elif ADV_WORLD_PASS == ADV_WORLD_PASS_CONT_REFRACTION
+     imageStore(contRefractionRadianceImage, ivec2(pixel), vec4(vec3(0.0), -1.0));
+ #endif
++#if ADV_WORLD_PASS == ADV_WORLD_PASS_CONT_REFLECTION || ADV_WORLD_PASS == ADV_WORLD_PASS_CONT_REFRACTION
++    // RTX 5090 fork: the continuation passes only do work for a transparent first hit, and a
++    // material is only transparent (transmission > 0) when its alpha mode is TRANSPARENT (opaque
++    // and cutout alpha resolve to exactly 0 or 1). Leave every other pixel before loading and
++    // re-shading both surface caches.
++    {
++        uint earlyFlags = decodeFirstHitFlags(loadPrimaryRayStateLayer(pixel, 2).w);
++        vec4 earlyCache7 = loadPrimarySurfaceCacheLayer(pixel, 7);
++        if (hasFirstHitFlag(earlyFlags, ADV_FIRST_HIT_FLAG_HIT_SKY) ||
++            !hasFirstHitFlag(earlyFlags, ADV_FIRST_HIT_FLAG_NOISY) ||
++            hasFirstHitFlag(earlyFlags, ADV_FIRST_HIT_FLAG_SKIP_FOG) ||
++            earlyCache7.w != ADV_SURFACE_CACHE_VALID_FLAG ||
++            getAlphaMode(decodeFirstHitUint(earlyCache7.yz)) != ALPHA_MODE_TRANSPARENT) {
++            return;
++        }
++    }
++#endif
+ 
+     float fovY = fovYFromProj(worldUBO.cameraProjMat);
+     float fovX = fovXFromProj(worldUBO.cameraProjMat);

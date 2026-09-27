@@ -1,0 +1,507 @@
+From 4f36db8acd6193059fbaecaa21c006555a0edc84 Mon Sep 17 00:00:00 2001
+From: c-drew <101952850+c-drew@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 23:20:46 -0400
+Subject: [PATCH 2/3] LodBridge: native chunk slots for LoD terrain after the
+ vanilla grid
+
+LodBridge reserves 4096 extra native chunk slots after the vanilla grid and lets a LoD
+provider submit or clear meshes in them through the same path vanilla chunks use
+(ChunkProxy.submitGeometry, factored out of rebuildSingle). The Radiance build of Voxy feeds
+it; any LoD source that produces PBRVertexConsumer quads can. PBRVertexConsumer.setGlintUV
+carries the LoD voxel size for per-block texture tiling in the shaders.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_014aGN7pt3GAnXQRSSREgQzx
+---
+ .../client/proxy/world/ChunkProxy.java        | 281 ++++++++++--------
+ .../client/proxy/world/LodBridge.java         | 148 +++++++++
+ .../client/vertex/PBRVertexConsumer.java      |  13 +
+ 3 files changed, 310 insertions(+), 132 deletions(-)
+ create mode 100644 src/main/java/com/radiance/client/proxy/world/LodBridge.java
+
+diff --git a/src/main/java/com/radiance/client/proxy/world/ChunkProxy.java b/src/main/java/com/radiance/client/proxy/world/ChunkProxy.java
+index e6ee876..b5ea6d6 100644
+--- a/src/main/java/com/radiance/client/proxy/world/ChunkProxy.java
++++ b/src/main/java/com/radiance/client/proxy/world/ChunkProxy.java
+@@ -103,7 +103,11 @@ public class ChunkProxy {
+     public static void init(int numChunks, int sizeX, int sizeY, int sizeZ,
+         int bottomSectionCoord) {
+         clear();
+-        initNative(numChunks, sizeX, sizeY, sizeZ, bottomSectionCoord);
++        // RTX 5090 fork: extra native slots after the vanilla grid hold LoD meshes (LodBridge).
++        synchronized (LodBridge.lock()) {
++            initNative(numChunks + LodBridge.CAPACITY, sizeX, sizeY, sizeZ, bottomSectionCoord);
++            LodBridge.onStorageInit(numChunks);
++        }
+     }
+ 
+     public static void updateSectionPos(ChunkSectionPos sectionPos) {
+@@ -337,139 +341,20 @@ public class ChunkProxy {
+                 }
+             };
+             builtChunk.data.set(chunkData);
++            if (!renderData.blockEntities.isEmpty()) {
++                BLOCK_ENTITY_CHUNKS.add(builtChunk);
++            }
+             builtChunkNum++;
+ 
+-            ByteBuffer geometryTypeBB = null;
+-            ByteBuffer geometryGroupNameBB = null;
+-            ByteBuffer geometryTextureBB = null;
+-            ByteBuffer vertexFormatBB = null;
+-            ByteBuffer vertexCountBB = null;
+-            ByteBuffer verticesBB = null;
+-            List<ByteBuffer> geometryGroupNameBuffers = new ArrayList<>(buffers.size());
+-
+-            try {
+-                int geometryTypeSize = buffers.size() * Integer.BYTES;
+-                geometryTypeBB = MemoryUtil.memAlloc(geometryTypeSize);
+-                long geometryTypeAddr = memAddress(geometryTypeBB);
+-                int geometryTypeBaseAddr = 0;
+-
+-                int geometryGroupNameSize = buffers.size() * Long.BYTES;
+-                geometryGroupNameBB = MemoryUtil.memAlloc(geometryGroupNameSize);
+-                long geometryGroupNameAddr = memAddress(geometryGroupNameBB);
+-                int geometryGroupNameBaseAddr = 0;
+-
+-                int geometryTextureSize = buffers.size() * Integer.BYTES;
+-                geometryTextureBB = MemoryUtil.memAlloc(geometryTextureSize);
+-                long geometryTextureAddr = memAddress(geometryTextureBB);
+-                int geometryTextureBaseAddr = 0;
+-
+-                int vertexFormatSize = buffers.size() * Integer.BYTES;
+-                vertexFormatBB = MemoryUtil.memAlloc(vertexFormatSize);
+-                long vertexFormatAddr = memAddress(vertexFormatBB);
+-                int vertexFormatBaseAddr = 0;
+-
+-                int vertexCountSize = buffers.size() * Integer.BYTES;
+-                vertexCountBB = MemoryUtil.memAlloc(vertexCountSize);
+-                long vertexCountAddr = memAddress(vertexCountBB);
+-                int vertexCountBaseAddr = 0;
+-
+-                int verticesSize = buffers.size() * Long.BYTES;
+-                verticesBB = MemoryUtil.memAlloc(verticesSize);
+-                long verticesAddr = memAddress(verticesBB);
+-                int verticesBaseAddr = 0;
+-
+-                for (Map.Entry<RenderLayer, BuiltBuffer> entry : buffers.entrySet()) {
+-                    RenderLayer renderLayer = entry.getKey();
+-                    assert renderLayer.getDrawMode() == QUADS;
+-
+-                    BuiltBuffer vertexBuffer = entry.getValue();
+-                    BufferProxy.BufferInfo vertexBufferInfo = BufferProxy.getBufferInfo(
+-                        vertexBuffer.getBuffer());
+-                    assert vertexBuffer.getDrawParameters()
+-                        .indexCount() == vertexBuffer.getDrawParameters()
+-                        .vertexCount() / 4 * 6;
+-
+-                    TextureManager
+-                        textureManager =
+-                        MinecraftClient.getInstance()
+-                            .getTextureManager();
+-
+-                    int
+-                        geometryTypeID =
+-                        Constants.GeometryTypes.getGeometryType(renderLayer, true)
+-                            .getValue();
+-                    int
+-                        geometryTextureID =
+-                        textureManager.getTexture(
+-                                ((RenderLayer.MultiPhase) renderLayer).phases.texture.getId()
+-                                    .orElse(MissingSprite.getMissingSpriteId()))
+-                            .getGlId();
+-                    int vertexFormatID = Constants.VertexFormats.getValue(
+-                        vertexBuffer.getDrawParameters()
+-                            .format());
+-
+-                    geometryTypeBB.putInt(geometryTypeBaseAddr, geometryTypeID);
+-                    geometryTypeBaseAddr += Integer.BYTES;
+-
+-                    ByteBuffer geometryGroupNameBuffer = MemoryUtil.memUTF8(renderLayer.name, true);
+-                    geometryGroupNameBuffers.add(geometryGroupNameBuffer);
+-                    geometryGroupNameBB.putLong(geometryGroupNameBaseAddr,
+-                        memAddress(geometryGroupNameBuffer));
+-                    geometryGroupNameBaseAddr += Long.BYTES;
+-
+-                    geometryTextureBB.putInt(geometryTextureBaseAddr, geometryTextureID);
+-                    geometryTextureBaseAddr += Integer.BYTES;
+-
+-                    vertexFormatBB.putInt(vertexFormatBaseAddr, vertexFormatID);
+-                    vertexFormatBaseAddr += Integer.BYTES;
+-
+-                    vertexCountBB.putInt(vertexCountBaseAddr,
+-                        vertexBuffer.getDrawParameters()
+-                            .vertexCount());
+-                    vertexCountBaseAddr += Integer.BYTES;
+-
+-                    verticesBB.putLong(verticesBaseAddr, vertexBufferInfo.addr());
+-                    verticesBaseAddr += Long.BYTES;
+-                }
+-
+-                rebuildSingle(builtChunk.getOrigin()
+-                        .getX(),
+-                    builtChunk.getOrigin()
+-                        .getY(),
+-                    builtChunk.getOrigin()
+-                        .getZ(),
+-                    builtChunk.index,
+-                    buffers.size(),
+-                    geometryTypeAddr,
+-                    geometryGroupNameAddr,
+-                    geometryTextureAddr,
+-                    vertexFormatAddr,
+-                    vertexCountAddr,
+-                    verticesAddr,
+-                    important);
+-            } finally {
+-                if (geometryTypeBB != null) {
+-                    MemoryUtil.memFree(geometryTypeBB);
+-                }
+-                if (geometryGroupNameBB != null) {
+-                    MemoryUtil.memFree(geometryGroupNameBB);
+-                }
+-                if (geometryTextureBB != null) {
+-                    MemoryUtil.memFree(geometryTextureBB);
+-                }
+-                if (vertexFormatBB != null) {
+-                    MemoryUtil.memFree(vertexFormatBB);
+-                }
+-                if (vertexCountBB != null) {
+-                    MemoryUtil.memFree(vertexCountBB);
+-                }
+-                if (verticesBB != null) {
+-                    MemoryUtil.memFree(verticesBB);
+-                }
+-                for (ByteBuffer geometryGroupNameBuffer : geometryGroupNameBuffers) {
+-                    MemoryUtil.memFree(geometryGroupNameBuffer);
+-                }
+-            }
++            submitGeometry(builtChunk.getOrigin()
++                    .getX(),
++                builtChunk.getOrigin()
++                    .getY(),
++                builtChunk.getOrigin()
++                    .getZ(),
++                builtChunk.index,
++                buffers,
++                important);
+         }
+ 
+         for (Map.Entry<RenderLayer, BuiltBuffer> entry : buffers.entrySet()) {
+@@ -478,6 +363,138 @@ public class ChunkProxy {
+         }
+     }
+ 
++    static void submitGeometry(int originX, int originY, int originZ, long index,
++        Map<RenderLayer, BuiltBuffer> buffers, boolean important) {
++        ByteBuffer geometryTypeBB = null;
++        ByteBuffer geometryGroupNameBB = null;
++        ByteBuffer geometryTextureBB = null;
++        ByteBuffer vertexFormatBB = null;
++        ByteBuffer vertexCountBB = null;
++        ByteBuffer verticesBB = null;
++        List<ByteBuffer> geometryGroupNameBuffers = new ArrayList<>(buffers.size());
++
++        try {
++            int geometryTypeSize = buffers.size() * Integer.BYTES;
++            geometryTypeBB = MemoryUtil.memAlloc(geometryTypeSize);
++            long geometryTypeAddr = memAddress(geometryTypeBB);
++            int geometryTypeBaseAddr = 0;
++
++            int geometryGroupNameSize = buffers.size() * Long.BYTES;
++            geometryGroupNameBB = MemoryUtil.memAlloc(geometryGroupNameSize);
++            long geometryGroupNameAddr = memAddress(geometryGroupNameBB);
++            int geometryGroupNameBaseAddr = 0;
++
++            int geometryTextureSize = buffers.size() * Integer.BYTES;
++            geometryTextureBB = MemoryUtil.memAlloc(geometryTextureSize);
++            long geometryTextureAddr = memAddress(geometryTextureBB);
++            int geometryTextureBaseAddr = 0;
++
++            int vertexFormatSize = buffers.size() * Integer.BYTES;
++            vertexFormatBB = MemoryUtil.memAlloc(vertexFormatSize);
++            long vertexFormatAddr = memAddress(vertexFormatBB);
++            int vertexFormatBaseAddr = 0;
++
++            int vertexCountSize = buffers.size() * Integer.BYTES;
++            vertexCountBB = MemoryUtil.memAlloc(vertexCountSize);
++            long vertexCountAddr = memAddress(vertexCountBB);
++            int vertexCountBaseAddr = 0;
++
++            int verticesSize = buffers.size() * Long.BYTES;
++            verticesBB = MemoryUtil.memAlloc(verticesSize);
++            long verticesAddr = memAddress(verticesBB);
++            int verticesBaseAddr = 0;
++
++            for (Map.Entry<RenderLayer, BuiltBuffer> entry : buffers.entrySet()) {
++                RenderLayer renderLayer = entry.getKey();
++                assert renderLayer.getDrawMode() == QUADS;
++
++                BuiltBuffer vertexBuffer = entry.getValue();
++                BufferProxy.BufferInfo vertexBufferInfo = BufferProxy.getBufferInfo(
++                    vertexBuffer.getBuffer());
++                assert vertexBuffer.getDrawParameters()
++                    .indexCount() == vertexBuffer.getDrawParameters()
++                    .vertexCount() / 4 * 6;
++
++                TextureManager
++                    textureManager =
++                    MinecraftClient.getInstance()
++                        .getTextureManager();
++
++                int
++                    geometryTypeID =
++                    Constants.GeometryTypes.getGeometryType(renderLayer, true)
++                        .getValue();
++                int
++                    geometryTextureID =
++                    textureManager.getTexture(
++                            ((RenderLayer.MultiPhase) renderLayer).phases.texture.getId()
++                                .orElse(MissingSprite.getMissingSpriteId()))
++                        .getGlId();
++                int vertexFormatID = Constants.VertexFormats.getValue(
++                    vertexBuffer.getDrawParameters()
++                        .format());
++
++                geometryTypeBB.putInt(geometryTypeBaseAddr, geometryTypeID);
++                geometryTypeBaseAddr += Integer.BYTES;
++
++                ByteBuffer geometryGroupNameBuffer = MemoryUtil.memUTF8(renderLayer.name, true);
++                geometryGroupNameBuffers.add(geometryGroupNameBuffer);
++                geometryGroupNameBB.putLong(geometryGroupNameBaseAddr,
++                    memAddress(geometryGroupNameBuffer));
++                geometryGroupNameBaseAddr += Long.BYTES;
++
++                geometryTextureBB.putInt(geometryTextureBaseAddr, geometryTextureID);
++                geometryTextureBaseAddr += Integer.BYTES;
++
++                vertexFormatBB.putInt(vertexFormatBaseAddr, vertexFormatID);
++                vertexFormatBaseAddr += Integer.BYTES;
++
++                vertexCountBB.putInt(vertexCountBaseAddr,
++                    vertexBuffer.getDrawParameters()
++                        .vertexCount());
++                vertexCountBaseAddr += Integer.BYTES;
++
++                verticesBB.putLong(verticesBaseAddr, vertexBufferInfo.addr());
++                verticesBaseAddr += Long.BYTES;
++            }
++
++            rebuildSingle(originX,
++                originY,
++                originZ,
++                index,
++                buffers.size(),
++                geometryTypeAddr,
++                geometryGroupNameAddr,
++                geometryTextureAddr,
++                vertexFormatAddr,
++                vertexCountAddr,
++                verticesAddr,
++                important);
++        } finally {
++            if (geometryTypeBB != null) {
++                MemoryUtil.memFree(geometryTypeBB);
++            }
++            if (geometryGroupNameBB != null) {
++                MemoryUtil.memFree(geometryGroupNameBB);
++            }
++            if (geometryTextureBB != null) {
++                MemoryUtil.memFree(geometryTextureBB);
++            }
++            if (vertexFormatBB != null) {
++                MemoryUtil.memFree(vertexFormatBB);
++            }
++            if (vertexCountBB != null) {
++                MemoryUtil.memFree(vertexCountBB);
++            }
++            if (verticesBB != null) {
++                MemoryUtil.memFree(verticesBB);
++            }
++            for (ByteBuffer geometryGroupNameBuffer : geometryGroupNameBuffers) {
++                MemoryUtil.memFree(geometryGroupNameBuffer);
++            }
++        }
++    }
++
+     private static native void rebuildSingle(int originX,
+         int originY,
+         int originZ,
+diff --git a/src/main/java/com/radiance/client/proxy/world/LodBridge.java b/src/main/java/com/radiance/client/proxy/world/LodBridge.java
+new file mode 100644
+index 0000000..b556b44
+--- /dev/null
++++ b/src/main/java/com/radiance/client/proxy/world/LodBridge.java
+@@ -0,0 +1,148 @@
++package com.radiance.client.proxy.world;
++
++import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
++import java.util.Map;
++import java.util.concurrent.atomic.AtomicInteger;
++import net.minecraft.client.render.BuiltBuffer;
++import net.minecraft.client.render.BuiltChunkStorage;
++import net.minecraft.client.render.RenderLayer;
++import net.minecraft.client.render.chunk.ChunkBuilder;
++import net.minecraft.client.world.ClientWorld;
++import net.minecraft.util.math.BlockPos;
++import net.minecraft.util.math.ChunkPos;
++
++/**
++ * RTX 5090 fork: lets an LoD provider (the Radiance build of Voxy) put far terrain into the
++ * ray-traced scene. The native chunk store gets {@link #CAPACITY} extra slots after the
++ * vanilla chunk grid; each holds one LoD mesh at an arbitrary world origin. Grid lookups in
++ * the shaders stop at the vanilla grid size, so these slots are only ever reached by rays.
++ *
++ * <p>Slots are cleared whenever the chunk storage is rebuilt (world change, render distance
++ * change). The generation number changes at the same time; providers pass the generation
++ * they read, and uploads for an older generation are dropped.
++ */
++public final class LodBridge {
++    public static final int CAPACITY = 4096;
++
++    private static final Object LOCK = new Object();
++    private static final AtomicInteger GENERATION = new AtomicInteger();
++    private static int baseIndex = -1;
++
++    private LodBridge() {
++    }
++
++    /** Called under {@link #lock()} by ChunkProxy after the native store is (re)created. */
++    static void onStorageInit(int vanillaChunkCount) {
++        baseIndex = vanillaChunkCount;
++        GENERATION.incrementAndGet();
++    }
++
++    static Object lock() {
++        return LOCK;
++    }
++
++    public static int generation() {
++        return GENERATION.get();
++    }
++
++    public static boolean isReady() {
++        synchronized (LOCK) {
++            return baseIndex >= 0;
++        }
++    }
++
++    /**
++     * Uploads one LoD mesh. Buffers use the vanilla block vertex format, positions relative to
++     * the origin, exactly like a chunk rebuild; the caller still owns (and closes) them.
++     */
++    public static boolean upload(int generation, int slot, int originX, int originY, int originZ,
++        Map<RenderLayer, BuiltBuffer> buffers) {
++        synchronized (LOCK) {
++            if (!accepts(generation, slot)) {
++                return false;
++            }
++            if (buffers.isEmpty()) {
++                ChunkProxy.invalidateSingle(baseIndex + slot);
++            } else {
++                ChunkProxy.submitGeometry(originX, originY, originZ, baseIndex + slot, buffers, false);
++            }
++            return true;
++        }
++    }
++
++    public static void clear(int generation, int slot) {
++        synchronized (LOCK) {
++            if (accepts(generation, slot)) {
++                ChunkProxy.invalidateSingle(baseIndex + slot);
++            }
++        }
++    }
++
++    /**
++     * Chunk columns Radiance draws right now, as {@link ChunkPos#toLong} keys: the column is
++     * loaded and every one of its sections has been built (or found empty). LoD must leave
++     * exactly these out. The render-distance circle is not enough: vanilla only builds a far
++     * chunk once all four neighbours are loaded, so the outermost loaded ring (and anything
++     * still queued) is not drawn yet and would otherwise be a hole. Client thread only.
++     */
++    public static LongOpenHashSet renderedColumns(ClientWorld world) {
++        LongOpenHashSet rendered = new LongOpenHashSet();
++        BuiltChunkStorage storage = ChunkProxy.storage();
++        if (storage == null || storage.chunks == null || world == null) {
++            return rendered;
++        }
++        ChunkBuilder.BuiltChunk[] chunks = storage.chunks;
++        var manager = world.getChunkManager();
++        // The grid is sizeX * sizeY * sizeZ slots at index (z * sizeY + y) * sizeX + x, and every
++        // slot of one (x, z) keeps the same chunk column as the grid scrolls. Walk it with plain
++        // arrays: one volatile read per section, one hash insert per column (~25k sections).
++        int sizeY = world.countVerticalSections();
++        int columns = sizeY > 0 ? chunks.length / sizeY : 0;
++        int sizeX = (int) Math.round(Math.sqrt(columns));
++        if (sizeX > 0 && sizeX * sizeX * sizeY == chunks.length) {
++            boolean[] pending = new boolean[columns];
++            long[] keys = new long[columns];
++            boolean[] seen = new boolean[columns];
++            for (int i = 0; i < chunks.length; i++) {
++                ChunkBuilder.BuiltChunk chunk = chunks[i];
++                if (chunk == null) {
++                    continue;
++                }
++                int column = (i / (sizeX * sizeY)) * sizeX + i % sizeX;
++                if (chunk.data.get() == ChunkBuilder.ChunkData.UNPROCESSED) {
++                    pending[column] = true;
++                }
++                if (!seen[column]) {
++                    seen[column] = true;
++                    BlockPos origin = chunk.getOrigin();
++                    keys[column] = ChunkPos.toLong(origin.getX() >> 4, origin.getZ() >> 4);
++                }
++            }
++            for (int column = 0; column < columns; column++) {
++                long key = keys[column];
++                if (seen[column] && !pending[column]
++                    && manager.isChunkLoaded(ChunkPos.getPackedX(key), ChunkPos.getPackedZ(key))) {
++                    rendered.add(key);
++                }
++            }
++            return rendered;
++        }
++        // Unexpected grid shape: the general (slower) walk.
++        LongOpenHashSet pending = new LongOpenHashSet();
++        for (ChunkBuilder.BuiltChunk chunk : chunks) {
++            if (chunk == null) {
++                continue;
++            }
++            BlockPos origin = chunk.getOrigin();
++            long key = ChunkPos.toLong(origin.getX() >> 4, origin.getZ() >> 4);
++            (chunk.data.get() == ChunkBuilder.ChunkData.UNPROCESSED ? pending : rendered).add(key);
++        }
++        rendered.removeAll(pending);
++        rendered.removeIf((long key) -> !manager.isChunkLoaded(ChunkPos.getPackedX(key), ChunkPos.getPackedZ(key)));
++        return rendered;
++    }
++
++    private static boolean accepts(int generation, int slot) {
++        return baseIndex >= 0 && generation == GENERATION.get() && slot >= 0 && slot < CAPACITY;
++    }
++}
+diff --git a/src/main/java/com/radiance/client/vertex/PBRVertexConsumer.java b/src/main/java/com/radiance/client/vertex/PBRVertexConsumer.java
+index 9711e06..db28091 100644
+--- a/src/main/java/com/radiance/client/vertex/PBRVertexConsumer.java
++++ b/src/main/java/com/radiance/client/vertex/PBRVertexConsumer.java
+@@ -240,6 +240,19 @@ public class PBRVertexConsumer implements VertexConsumer {
+         return ptr;
+     }
+ 
++    /**
++     * RTX 5090 fork: writes the current vertex's glint UV. Only LoD terrain uses it, to carry its
++     * voxel size in blocks for per-block texture tiling in the ray tracing shaders; block faces
++     * never use glint, and every glint read in the shaders is gated on the glint flag.
++     */
++    public void setGlintUV(float u, float v) {
++        int off = this.offsetsByElementId[PBR_GLINT_UV.id()];
++        if (off >= 0 && this.vertexPointer != -1L) {
++            MemoryUtil.memPutFloat(this.vertexPointer + off, u);
++            MemoryUtil.memPutFloat(this.vertexPointer + off + 4L, v);
++        }
++    }
++
+     private long beginVertex(int glintTextureID) {
+         ensureBuilding();
+         endVertex();

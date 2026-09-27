@@ -1,0 +1,51 @@
+From 28f0b1410fe2983e27cf1784e2b528f8fb438a3a Mon Sep 17 00:00:00 2001
+From: c-drew <101952850+c-drew@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 23:20:46 -0400
+Subject: [PATCH 3/3] Fluids: no side faces toward unloaded chunks
+
+At the edge of the loaded area the neighbour chunk reads as air, which gives rivers and oceans
+a wall facing the unloaded chunk (visible against LoD terrain). The edge chunk is rebuilt when
+that neighbour loads, so skipping the side is safe.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_014aGN7pt3GAnXQRSSREgQzx
+---
+ .../FluidRendererMixins.java                   | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/src/main/java/com/radiance/mixins/vulkan_render_integration/FluidRendererMixins.java b/src/main/java/com/radiance/mixins/vulkan_render_integration/FluidRendererMixins.java
+index 833ed2c..dd51812 100644
+--- a/src/main/java/com/radiance/mixins/vulkan_render_integration/FluidRendererMixins.java
++++ b/src/main/java/com/radiance/mixins/vulkan_render_integration/FluidRendererMixins.java
+@@ -92,6 +92,17 @@ public abstract class FluidRendererMixins {
+     @Shadow
+     protected abstract int getLight(BlockRenderView world, BlockPos pos);
+ 
++    @Unique
++    private static boolean radiance$neighbourLoaded(BlockPos pos, Direction direction) {
++        int x = pos.getX() + direction.getOffsetX();
++        int z = pos.getZ() + direction.getOffsetZ();
++        if ((x >> 4) == (pos.getX() >> 4) && (z >> 4) == (pos.getZ() >> 4)) {
++            return true;
++        }
++        net.minecraft.client.world.ClientWorld clientWorld = net.minecraft.client.MinecraftClient.getInstance().world;
++        return clientWorld == null || clientWorld.getChunkManager().isChunkLoaded(x >> 4, z >> 4);
++    }
++
+     @Unique
+     private void vertex(VertexConsumer vertexConsumer,
+         float x,
+@@ -153,6 +164,13 @@ public abstract class FluidRendererMixins {
+         boolean renderSouth = shouldRenderSide(fluidState, blockState, Direction.SOUTH, fluidSouth);
+         boolean renderWest = shouldRenderSide(fluidState, blockState, Direction.WEST, fluidWest);
+         boolean renderEast = shouldRenderSide(fluidState, blockState, Direction.EAST, fluidEast);
++        // RTX 5090 fork: at the edge of the loaded area the neighbour chunk reads as air, which
++        // gives rivers and oceans a wall facing the unloaded chunk (visible against LoD terrain).
++        // The edge chunk is rebuilt when that neighbour loads, so skipping the side is safe.
++        renderNorth = renderNorth && radiance$neighbourLoaded(pos, Direction.NORTH);
++        renderSouth = renderSouth && radiance$neighbourLoaded(pos, Direction.SOUTH);
++        renderWest = renderWest && radiance$neighbourLoaded(pos, Direction.WEST);
++        renderEast = renderEast && radiance$neighbourLoaded(pos, Direction.EAST);
+ 
+         if (renderTop || renderBottom || renderEast || renderWest || renderNorth || renderSouth) {
+             float lightDown = world.getBrightness(Direction.DOWN, true);

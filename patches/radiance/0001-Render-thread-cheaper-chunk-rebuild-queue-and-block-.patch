@@ -1,0 +1,282 @@
+From c323c2d8d27dfd6809e015c0c6b505edddc1291b Mon Sep 17 00:00:00 2001
+From: c-drew <101952850+c-drew@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 23:20:46 -0400
+Subject: [PATCH 1/3] Render thread: cheaper chunk rebuild queue and block
+ entity pass
+
+- Rebuild queue: a ConcurrentLinkedQueue plus a queued-index set instead of a
+  ConcurrentHashMap iterated and cleared every frame. Iterating or clearing a CHM walks its
+  whole table, which stays at its peak size after a burst of rebuilds (world load, travel).
+  Chunks enqueued while draining are no longer dropped by the trailing clear().
+- Block entities: chunks rebuilt with block entities are indexed instead of walking every
+  chunk section each frame, and the index is re-verified 1/60 of the storage per frame (a
+  full re-scan every 60th frame spiked: render distance 32, 1% low 91 -> 109 fps with the
+  spread re-check). Block entities the dispatcher would not draw (no
+  renderer, unsupported state, out of range) are skipped before buffers are allocated.
+- Per-object vertex storage starts at 16 KB instead of 768 KB and render layer names are
+  encoded to native strings once (upstream issue #252).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_014aGN7pt3GAnXQRSSREgQzx
+---
+ .../client/proxy/world/ChunkProxy.java        | 37 ++++++--
+ .../client/proxy/world/EntityProxy.java       | 91 ++++++++++++++++---
+ 2 files changed, 110 insertions(+), 18 deletions(-)
+
+diff --git a/src/main/java/com/radiance/client/proxy/world/ChunkProxy.java b/src/main/java/com/radiance/client/proxy/world/ChunkProxy.java
+index 368545c..e6ee876 100644
+--- a/src/main/java/com/radiance/client/proxy/world/ChunkProxy.java
++++ b/src/main/java/com/radiance/client/proxy/world/ChunkProxy.java
+@@ -52,10 +52,26 @@ public class ChunkProxy {
+             return false;
+         }
+     };
+-    private static final Map<Integer, ChunkBuilder.BuiltChunk> rebuildQueue = new ConcurrentHashMap<>();
++    // RTX 5090 fork: a queue plus a per-index "queued" set instead of a ConcurrentHashMap that
++    // was iterated and cleared every frame. Iterating or clearing a ConcurrentHashMap walks its
++    // whole table, which stays at its peak size after a burst of rebuilds (world load, travel),
++    // so every later frame paid for it; draining the queue costs only what is queued. Chunks
++    // enqueued while draining are no longer dropped by the trailing clear().
++    private static final java.util.concurrent.ConcurrentLinkedQueue<ChunkBuilder.BuiltChunk> rebuildQueue =
++        new java.util.concurrent.ConcurrentLinkedQueue<>();
++    private static final java.util.Set<Integer> rebuildQueued = ConcurrentHashMap.newKeySet();
++    // RTX 5090 fork: chunks rebuilt with block entities, so the per-frame block entity
++    // pass does not have to walk every loaded chunk section (upstream issue #252).
++    public static final java.util.Set<ChunkBuilder.BuiltChunk> BLOCK_ENTITY_CHUNKS =
++        ConcurrentHashMap.newKeySet();
+     private static final java.util.Set<Integer> forcedRebuildIndices = ConcurrentHashMap.newKeySet();
+     private static final List<Future<?>> rebuildTasks = new ArrayList<>();
+     private static BuiltChunkStorage currentStorage = null;
++
++    /** The vanilla chunk grid Radiance is mirroring, or null between worlds. */
++    static BuiltChunkStorage storage() {
++        return currentStorage;
++    }
+     private static boolean pendingRebuildAll = false;
+     private static int numChunkRebuildThreads = getChunkRebuildThreadCount();
+     private static final int numImportantChunkRebuildThreads = 1;
+@@ -141,6 +157,7 @@ public class ChunkProxy {
+             });
+ 
+         rebuildQueue.clear();
++        rebuildQueued.clear();
+         forcedRebuildIndices.clear();
+         rebuildTasks.clear();
+         currentStorage = null;
+@@ -148,7 +165,9 @@ public class ChunkProxy {
+     }
+ 
+     public static void enqueueRebuild(ChunkBuilder.BuiltChunk chunk) {
+-        rebuildQueue.put(chunk.index, chunk);
++        if (rebuildQueued.add(chunk.index)) {
++            rebuildQueue.add(chunk);
++        }
+     }
+ 
+     public static void rebuildAll() {
+@@ -179,7 +198,9 @@ public class ChunkProxy {
+     public static void rebuild(Camera camera) {
+ 
+         BlockPos blockPos = camera.getBlockPos();
+-        for (ChunkBuilder.BuiltChunk builtChunk : rebuildQueue.values()) {
++        ChunkBuilder.BuiltChunk builtChunk;
++        while ((builtChunk = rebuildQueue.poll()) != null) {
++            rebuildQueued.remove(builtChunk.index);
+             boolean forced = forcedRebuildIndices.remove(builtChunk.index);
+             if (builtChunk.needsRebuild() && (forced || builtChunk.shouldBuild())) {
+                 builtChunk.cancelRebuild();
+@@ -191,20 +212,19 @@ public class ChunkProxy {
+                 boolean isImportant = chunkCenterPos.getSquaredDistance(blockPos) < 768.0
+                     || builtChunk.needsImportantRebuild();
+ 
++                ChunkBuilder.BuiltChunk chunk = builtChunk;
+                 if (isImportant) {
+                     Future<?> rebuildTask = importantChunkRebuildExecutor.submit(() -> {
+-                        rebuildSingle(builtChunk, true);
++                        rebuildSingle(chunk, true);
+                     });
+                     rebuildTasks.add(rebuildTask);
+                 } else {
+                     backgroundChunkRebuildExecutor.execute(() -> {
+-                        rebuildSingle(builtChunk, false);
++                        rebuildSingle(chunk, false);
+                     });
+                 }
+             }
+         }
+-
+-        rebuildQueue.clear();
+     }
+ 
+     public static void waitImportantChunkRebuild() {
+@@ -293,6 +313,9 @@ public class ChunkProxy {
+                 }
+             };
+             builtChunk.data.set(chunkData);
++            if (!renderData.blockEntities.isEmpty()) {
++                BLOCK_ENTITY_CHUNKS.add(builtChunk);
++            }
+             builtChunkNum++;
+ 
+             invalidateSingle(builtChunk.index);
+diff --git a/src/main/java/com/radiance/client/proxy/world/EntityProxy.java b/src/main/java/com/radiance/client/proxy/world/EntityProxy.java
+index 918a410..e000a53 100644
+--- a/src/main/java/com/radiance/client/proxy/world/EntityProxy.java
++++ b/src/main/java/com/radiance/client/proxy/world/EntityProxy.java
+@@ -89,6 +89,30 @@ public class EntityProxy {
+     public static final ConcurrentMap<Class<? extends Particle>, AtomicInteger> PARTICLE_COUNTERS = new ConcurrentHashMap<>();
+     public static VertexConsumerProvider postTextVertexConsumerProvider;
+ 
++    // RTX 5090 fork: per-entity and per-block-entity vertex storage is created every
++    // frame. BufferAllocator grows on demand, so starting at 16 KB instead of 768 KB
++    // avoids hundreds of large native allocations per frame (upstream issue #252).
++    private static final int PER_OBJECT_BUFFER_BYTES = 16384;
++
++    // Render layer and content names are constants; encode each to a native string
++    // once instead of allocating and freeing two per layer per frame (issue #252).
++    private static final java.util.concurrent.ConcurrentHashMap<String, ByteBuffer> NATIVE_NAMES =
++        new java.util.concurrent.ConcurrentHashMap<>();
++    private static final int NATIVE_NAME_LIMIT = 4096;
++
++    private static ByteBuffer nativeName(String name, List<ByteBuffer> perCallBuffers) {
++        ByteBuffer cached = NATIVE_NAMES.get(name);
++        if (cached != null) {
++            return cached;
++        }
++        if (NATIVE_NAMES.size() < NATIVE_NAME_LIMIT) {
++            return NATIVE_NAMES.computeIfAbsent(name, n -> MemoryUtil.memUTF8(n, true));
++        }
++        ByteBuffer buffer = MemoryUtil.memUTF8(name, true);
++        perCallBuffers.add(buffer);
++        return buffer;
++    }
++
+     private static final Identifier SUN_TEXTURE = Identifier.ofVanilla(
+         "textures/environment/sun.png");
+     private static final Identifier MOON_PHASES_TEXTURE = Identifier.ofVanilla(
+@@ -283,7 +307,7 @@ public class EntityProxy {
+             }
+ 
+             StorageVertexConsumerProvider entityStorageVertexConsumerProvider = new StorageVertexConsumerProvider(
+-                786432);
++                PER_OBJECT_BUFFER_BYTES);
+             entityStorageVertexConsumerProviders.add(entityStorageVertexConsumerProvider);
+ 
+             VertexConsumerProvider vertexConsumerProvider;
+@@ -314,7 +338,7 @@ public class EntityProxy {
+ 
+             if (entity instanceof DisplayEntity.TextDisplayEntity) {
+                 StorageVertexConsumerProvider postTextStorageVertexConsumerProvider = new StorageVertexConsumerProvider(
+-                    786432);
++                    PER_OBJECT_BUFFER_BYTES);
+                 entityStorageVertexConsumerProviders.add(postTextStorageVertexConsumerProvider);
+                 entityRenderDispatcher.render(entity,
+                     0,
+@@ -396,6 +420,42 @@ public class EntityProxy {
+         queueBuild(entityStorageVertexConsumerProviders, entityRenderDataList);
+     }
+ 
++    private static final int RESCAN_FRAMES = 60;
++    private static BuiltChunkStorage indexedStorage = null;
++    private static int rescanCursor = 0;
++
++    // Chunks whose current data may hold block entities. Rebuilds add to the index as
++    // they happen, and every frame re-checks the next 1/60 of the storage, so each
++    // chunk is re-verified once a second and a chunk reaching block entities any other
++    // way is picked up within 60 frames. Spreading the scan keeps it from costing a
++    // few ms every 60th frame at high render distances. A new storage object (render
++    // distance change) is scanned in full. Each chunk's current data is still read every
++    // frame, so cleared or relocated chunks contribute nothing, exactly as before.
++    private static Iterable<ChunkBuilder.BuiltChunk> blockEntityChunks(BuiltChunkStorage chunks) {
++        ChunkBuilder.BuiltChunk[] all = chunks.chunks;
++        int count;
++        if (chunks != indexedStorage) {
++            ChunkProxy.BLOCK_ENTITY_CHUNKS.clear();
++            indexedStorage = chunks;
++            rescanCursor = 0;
++            count = all.length;
++        } else {
++            count = (all.length + RESCAN_FRAMES - 1) / RESCAN_FRAMES;
++        }
++        for (int n = 0; n < count && all.length > 0; n++) {
++            if (rescanCursor >= all.length) {
++                rescanCursor = 0;
++            }
++            ChunkBuilder.BuiltChunk builtChunk = all[rescanCursor++];
++            if (builtChunk.getData().getBlockEntities().isEmpty()) {
++                ChunkProxy.BLOCK_ENTITY_CHUNKS.remove(builtChunk);
++            } else {
++                ChunkProxy.BLOCK_ENTITY_CHUNKS.add(builtChunk);
++            }
++        }
++        return ChunkProxy.BLOCK_ENTITY_CHUNKS;
++    }
++
+     public static synchronized Pair<List<StorageVertexConsumerProvider>, EntityRenderDataList> queueBlockEntitiesRebuild(
+         BuiltChunkStorage chunks,
+         Set<BlockEntity> noCullingBlockEntities,
+@@ -408,15 +468,26 @@ public class EntityProxy {
+ 
+         List<StorageVertexConsumerProvider> crumblingStorageVertexConsumerProviders = new ArrayList<>();
+         EntityRenderDataList crumblingRenderDataList = new EntityRenderDataList();
+-        for (ChunkBuilder.BuiltChunk builtChunk : chunks.chunks) {
++        for (ChunkBuilder.BuiltChunk builtChunk : blockEntityChunks(chunks)) {
+             List<BlockEntity>
+                 list =
+                 builtChunk.getData()
+                     .getBlockEntities();
+             if (!list.isEmpty()) {
+                 for (BlockEntity blockEntity : list) {
++                    // RTX 5090 fork: the dispatcher draws nothing for these (no renderer, block no
++                    // longer supports it, or beyond the renderer's distance); skip them before
++                    // allocating buffers and render data. Same checks, same order as
++                    // BlockEntityRenderDispatcher.render.
++                    var blockEntityRenderer = blockEntityRenderDispatcher.get(blockEntity);
++                    if (blockEntityRenderer == null || !blockEntity.hasWorld()
++                        || !blockEntity.getType().supports(blockEntity.getCachedState())
++                        || !blockEntityRenderer.isInRenderDistance(blockEntity,
++                            blockEntityRenderDispatcher.camera.getPos())) {
++                        continue;
++                    }
+                     StorageVertexConsumerProvider entityStorageVertexConsumerProvider = new StorageVertexConsumerProvider(
+-                        786432);
++                        PER_OBJECT_BUFFER_BYTES);
+                     entityStorageVertexConsumerProviders.add(entityStorageVertexConsumerProvider);
+                     StorageVertexConsumerProvider crumblingStorageVertexConsumerProvider = new StorageVertexConsumerProvider(
+                         0);
+@@ -483,7 +554,7 @@ public class EntityProxy {
+ 
+         for (BlockEntity blockEntity : noCullingBlockEntities) {
+             StorageVertexConsumerProvider entityStorageVertexConsumerProvider = new StorageVertexConsumerProvider(
+-                786432);
++                PER_OBJECT_BUFFER_BYTES);
+             entityStorageVertexConsumerProviders.add(entityStorageVertexConsumerProvider);
+ 
+             BlockPos blockPos = blockEntity.getPos();
+@@ -542,7 +613,7 @@ public class EntityProxy {
+                             .getStage();
+ 
+                     StorageVertexConsumerProvider blockCrumblingStorageVertexConsumerProvider = new StorageVertexConsumerProvider(
+-                        786432);
++                        PER_OBJECT_BUFFER_BYTES);
+                     blockCrumblingStorageVertexConsumerProviders.add(
+                         blockCrumblingStorageVertexConsumerProvider);
+ 
+@@ -1023,14 +1094,12 @@ public class EntityProxy {
+                     geometryTypeBB.putInt(geometryTypeBaseAddr, geometryTypeID);
+                     geometryTypeBaseAddr += Integer.BYTES;
+ 
+-                    ByteBuffer geometryGroupNameBuffer = MemoryUtil.memUTF8(renderLayer.name, true);
+-                    geometryGroupNameBuffers.add(geometryGroupNameBuffer);
++                    ByteBuffer geometryGroupNameBuffer = nativeName(renderLayer.name, geometryGroupNameBuffers);
+                     geometryGroupNameBB.putLong(geometryGroupNameBaseAddr, memAddress(geometryGroupNameBuffer));
+                     geometryGroupNameBaseAddr += Long.BYTES;
+ 
+-                    ByteBuffer geometryContentNameBuffer = MemoryUtil.memUTF8(
+-                        entityRenderLayer.contentName(), true);
+-                    geometryContentNameBuffers.add(geometryContentNameBuffer);
++                    ByteBuffer geometryContentNameBuffer = nativeName(entityRenderLayer.contentName(),
++                        geometryContentNameBuffers);
+                     geometryContentNameBB.putLong(geometryContentNameBaseAddr,
+                         memAddress(geometryContentNameBuffer));
+                     geometryContentNameBaseAddr += Long.BYTES;

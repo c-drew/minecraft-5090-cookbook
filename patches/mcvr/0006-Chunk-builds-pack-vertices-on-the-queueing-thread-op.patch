@@ -1,0 +1,119 @@
+From b12a6a157ab782790d3c9fd11397824713acf1e5 Mon Sep 17 00:00:00 2001
+From: c-drew <101952850+c-drew@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 23:13:13 -0400
+Subject: [PATCH 06/10] Chunk builds: pack vertices on the queueing thread,
+ optional per-frame budget
+
+The position/material/index conversion for a chunk now runs when the build is queued, off the
+render thread; the batch build only appends the packed data. MCVR_CHUNK_BUILD_BUDGET_MS caps
+the render-thread time spent scheduling batches per frame (default off; at least one batch).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_014aGN7pt3GAnXQRSSREgQzx
+---
+ src/core/render/chunks.cpp | 41 +++++++++++++++++++++++++++++++++++++-
+ src/core/render/chunks.hpp |  6 ++++++
+ 2 files changed, 46 insertions(+), 1 deletion(-)
+
+diff --git a/src/core/render/chunks.cpp b/src/core/render/chunks.cpp
+index b126214..bcc2458 100644
+--- a/src/core/render/chunks.cpp
++++ b/src/core/render/chunks.cpp
+@@ -1,3 +1,4 @@
++#include "core/util/fork_config.hpp"
+ #include "core/render/chunks.hpp"
+ 
+ #include "common/hit_group_registry.hpp"
+@@ -8,6 +9,8 @@
+ #include "core/vulkan/vertex.hpp"
+ 
+ #include <algorithm>
++#include <cstdlib>
++#include <chrono>
+ #include <array>
+ #include <cassert>
+ #include <cmath>
+@@ -713,7 +716,13 @@ void ChunkBuildDataBatch::build() {
+         if (data == nullptr) {
+             continue;
+         }
+-        buildChunkPackedVertices(data->vertices, data->indices, packedPositions, packedMaterials, packedIndices);
++        if (data->packed) {
++            packedPositions.insert(packedPositions.end(), data->packedPositions.begin(), data->packedPositions.end());
++            packedMaterials.insert(packedMaterials.end(), data->packedMaterials.begin(), data->packedMaterials.end());
++            packedIndices.insert(packedIndices.end(), data->packedIndices.begin(), data->packedIndices.end());
++        } else {
++            buildChunkPackedVertices(data->vertices, data->indices, packedPositions, packedMaterials, packedIndices);
++        }
+     }
+ 
+     if (!packedPositions.empty()) {
+@@ -919,7 +928,22 @@ void ChunkBuildScheduler::waitAllBatchesFinish() {
+ void ChunkBuildScheduler::tryScheduleBatches(uint32_t maxBatchSize) {
+     if (!Renderer::instance().framework()->isRunning()) return;
+     RAD_PROFILE_SCOPE("chunk_scheduler.try_schedule_batches");
++    // RTX 5090 fork: MCVR_CHUNK_BUILD_BUDGET_MS caps the render-thread time spent building batches per
++    // frame (at least one batch always runs). Without it, a frame builds batches until the fences run out,
++    // which stalls the render thread for up to ~20 ms when many chunks stream in (flying).
++    static const double budgetMs = [] {
++        const char *v = mcvr_fork::setting("MCVR_CHUNK_BUILD_BUDGET_MS");
++        return v ? std::atof(v) : 0.0;
++    }();
++    const auto budgetStart = std::chrono::steady_clock::now();
++    bool builtOne = false;
+     while (true) {
++        if (builtOne && budgetMs > 0.0 &&
++            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - budgetStart).count() >=
++                budgetMs) {
++            return;
++        }
++        builtOne = true;
+         std::shared_ptr<vk::Fence> fence;
+         std::shared_ptr<vk::CommandBuffer> commandBuffer;
+         std::shared_ptr<ChunkBuildDataBatch> chunkBuildDataBatch;
+@@ -1553,6 +1577,17 @@ void Chunks::queueChunkBuild(ChunkBuildTask task) {
+         }
+     }
+ 
++    std::vector<vk::VertexFormat::PositionVertex> packedPositions;
++    std::vector<vk::VertexFormat::MaterialVertex> packedMaterials;
++    std::vector<uint32_t> packedIndices;
++    {
++        RAD_PROFILE_SCOPE("chunks.queue_chunk_build.pack_vertices");
++        packedPositions.reserve(allVertexCount);
++        packedMaterials.reserve(allVertexCount);
++        packedIndices.reserve(allIndexCount);
++        buildChunkPackedVertices(vertices, indices, packedPositions, packedMaterials, packedIndices);
++    }
++
+     std::unique_lock<std::recursive_mutex> lock(mutex_);
+ 
+     const bool collectChunkEmission = Renderer::options.collectChunkEmission;
+@@ -1562,6 +1597,10 @@ void Chunks::queueChunkBuild(ChunkBuildTask task) {
+                                static_cast<uint32_t>(vertices.size()), std::move(geometryTypes),
+                                std::move(geometryGroupNames), std::move(geometryGroupIds), std::move(vertices),
+                                std::move(indices));
++    chunkBuildData->packedPositions = std::move(packedPositions);
++    chunkBuildData->packedMaterials = std::move(packedMaterials);
++    chunkBuildData->packedIndices = std::move(packedIndices);
++    chunkBuildData->packed = true;
+ 
+     if (collectChunkEmission && (Renderer::instance().textures() != nullptr)) {
+         auto textures = Renderer::instance().textures();
+diff --git a/src/core/render/chunks.hpp b/src/core/render/chunks.hpp
+index 3e9f151..48c4e43 100644
+--- a/src/core/render/chunks.hpp
++++ b/src/core/render/chunks.hpp
+@@ -59,6 +59,12 @@ struct ChunkBuildData : public SharedObject<ChunkBuildData> {
+     std::vector<uint32_t> geometryGroupIds;
+     std::vector<std::vector<vk::VertexFormat::PBRVertex>> vertices;
+     std::vector<std::vector<uint32_t>> indices;
++    // RTX 5090 fork: position/material/index data converted on the queueing thread, so the
++    // batch build on the render thread only appends it.
++    std::vector<vk::VertexFormat::PositionVertex> packedPositions;
++    std::vector<vk::VertexFormat::MaterialVertex> packedMaterials;
++    std::vector<uint32_t> packedIndices;
++    bool packed = false;
+     std::vector<VkDeviceAddress> indexBufferAddresses;
+     std::vector<VkDeviceAddress> positionBufferAddresses;
+     std::vector<VkDeviceAddress> materialBufferAddresses;

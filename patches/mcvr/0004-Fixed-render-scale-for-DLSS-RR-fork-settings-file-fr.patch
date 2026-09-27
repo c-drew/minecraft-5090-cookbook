@@ -1,0 +1,1261 @@
+From cf88fd9c901f645163bd68c11c4d05d6d046bcd5 Mon Sep 17 00:00:00 2001
+From: c-drew <101952850+c-drew@users.noreply.github.com>
+Date: Sat, 26 Sep 2026 23:13:13 -0400
+Subject: [PATCH 04/10] Fixed render scale for DLSS-RR, fork settings file,
+ frame timing tools
+
+Render scale: every render-resolution image keeps the DLSS mode's size and a frame renders
+into its top-left sub-rectangle, which DLSS-RR is told about. MCVR_RENDER_SCALE (per axis,
+relative to the mode's size) picks a size between the DLSS presets, e.g. 0.78125 of Quality
+at 1440p = 1333x750. Passes that read image sizes use WorldUBO.renderSizePacked instead;
+temporal passes reproject with the previous frame's size. A dynamic controller (MCVR_DRS=1)
+exists but is off: DLSS-RR spends ~14 ms of CPU on every render size change.
+
+Settings: mcvr_fork::setting() reads the environment variable, else the same key from
+<game dir>/radiance/fork.properties, so a launcher-started game keeps its settings.
+
+Timing: MCVR_TIMING_FILE / MCVR_TIMING_FRAMES write per-pass GPU timestamps,
+MCVR_CPU_FRAME_LOG writes per-frame render-thread checkpoints and profiler zones.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_014aGN7pt3GAnXQRSSREgQzx
+---
+ src/common/shared.hpp                         |   6 +-
+ ...ance_client_proxy_vulkan_RendererProxy.cpp |   7 +
+ ...adiance_client_proxy_world_EntityProxy.cpp |   3 +
+ src/core/render/buffers.cpp                   |   4 +
+ src/core/render/dynamic_resolution.hpp        | 290 ++++++++++++++++++
+ .../render/modules/world/dlss/dlss_module.cpp |  41 ++-
+ .../modules/world/dlss/dlss_wrapper.cpp       |  16 +-
+ .../world/ray_tracing/ray_tracing_module.cpp  |  31 +-
+ .../world/ray_tracing/ray_tracing_module.hpp  |   6 +
+ src/core/render/pipeline.cpp                  |  16 +-
+ src/core/render/render_framework.cpp          |   6 +
+ src/core/util/cpu_frame_log.hpp               |  74 +++++
+ src/core/util/fork_config.hpp                 |  43 +++
+ src/core/util/gpu_timing.hpp                  | 130 ++++++++
+ .../internal/advanced/common/render_size.glsl |  22 ++
+ .../generate_initial_samples.comp             |   3 +-
+ .../advanced/spatial_reuse/spatial_reuse.comp |   3 +-
+ .../temporal_reuse/temporal_reuse.comp        |  12 +-
+ .../advanced/volumetric_light/blur.comp       |  12 +
+ .../advanced/volumetric_light/temporal.comp   |  14 +-
+ .../volumetric_light/volumetric_light.rgen    |   5 +-
+ .../internal/advanced/world/world.rgen        |   9 +-
+ 22 files changed, 710 insertions(+), 43 deletions(-)
+ create mode 100644 src/core/render/dynamic_resolution.hpp
+ create mode 100644 src/core/util/cpu_frame_log.hpp
+ create mode 100644 src/core/util/fork_config.hpp
+ create mode 100644 src/core/util/gpu_timing.hpp
+ create mode 100644 src/shader/world/ray_tracing/internal/advanced/common/render_size.glsl
+
+diff --git a/src/common/shared.hpp b/src/common/shared.hpp
+index da0aa4e..76a9e39 100644
+--- a/src/common/shared.hpp
++++ b/src/common/shared.hpp
+@@ -236,8 +236,10 @@ namespace Data {
+ 
+         T_UINT fogType;
+         T_UINT skyType;
+-        T_UINT pad2;
+-        T_UINT pad3;
++        // RTX 5090 fork: dynamic resolution. Render size of this frame and of the previous one,
++        // width | height << 16 (0: the full size of the render-resolution images).
++        T_UINT renderSizePacked;
++        T_UINT prevRenderSizePacked;
+ 
+         T_DVEC4 cameraPos; // w for padding
+         T_IVEC4 chunkGridInfo; // x=sizeX, y=sizeY, z=sizeZ, w=bottomSectionCoord
+diff --git a/src/core/middleware/com_radiance_client_proxy_vulkan_RendererProxy.cpp b/src/core/middleware/com_radiance_client_proxy_vulkan_RendererProxy.cpp
+index 8836a96..c96a1dd 100644
+--- a/src/core/middleware/com_radiance_client_proxy_vulkan_RendererProxy.cpp
++++ b/src/core/middleware/com_radiance_client_proxy_vulkan_RendererProxy.cpp
+@@ -8,6 +8,7 @@
+ #include "core/render/renderer.hpp"
+ #include "core/render/textures.hpp"
+ #include "core/render/world.hpp"
++#include "core/util/cpu_frame_log.hpp"
+ 
+ #include <algorithm>
+ #include <unordered_map>
+@@ -143,19 +144,25 @@ JNIEXPORT jint JNICALL Java_com_radiance_client_proxy_vulkan_RendererProxy_maxSu
+ JNIEXPORT void JNICALL Java_com_radiance_client_proxy_vulkan_RendererProxy_acquireContext(JNIEnv *, jclass) {
+     auto framework = Renderer::instance().framework();
+     if (framework == nullptr) return;
++    mcvr_cpu_frame::mark(mcvr_cpu_frame::AcquireBegin);
+     framework->acquireContext();
++    mcvr_cpu_frame::mark(mcvr_cpu_frame::AcquireEnd);
+ }
+ 
+ JNIEXPORT void JNICALL Java_com_radiance_client_proxy_vulkan_RendererProxy_submitCommand(JNIEnv *, jclass) {
+     auto framework = Renderer::instance().framework();
+     if (framework == nullptr) return;
++    mcvr_cpu_frame::mark(mcvr_cpu_frame::SubmitBegin);
+     framework->submitCommand();
++    mcvr_cpu_frame::mark(mcvr_cpu_frame::SubmitEnd);
+ }
+ 
+ JNIEXPORT void JNICALL Java_com_radiance_client_proxy_vulkan_RendererProxy_present(JNIEnv *, jclass) {
+     auto framework = Renderer::instance().framework();
+     if (framework == nullptr) return;
++    mcvr_cpu_frame::mark(mcvr_cpu_frame::PresentBegin);
+     framework->present();
++    mcvr_cpu_frame::mark(mcvr_cpu_frame::PresentEnd);
+ }
+ 
+ JNIEXPORT void JNICALL Java_com_radiance_client_proxy_vulkan_RendererProxy_fuseWorld(JNIEnv *, jclass) {
+diff --git a/src/core/middleware/com_radiance_client_proxy_world_EntityProxy.cpp b/src/core/middleware/com_radiance_client_proxy_world_EntityProxy.cpp
+index af25d33..bb3ccfc 100644
+--- a/src/core/middleware/com_radiance_client_proxy_world_EntityProxy.cpp
++++ b/src/core/middleware/com_radiance_client_proxy_world_EntityProxy.cpp
+@@ -1,3 +1,4 @@
++#include "core/util/cpu_frame_log.hpp"
+ #include "com_radiance_client_proxy_world_EntityProxy.h"
+ 
+ #include "core/render/entities.hpp"
+@@ -56,5 +57,7 @@ JNIEXPORT void JNICALL Java_com_radiance_client_proxy_world_EntityProxy_queueBui
+ JNIEXPORT void JNICALL Java_com_radiance_client_proxy_world_EntityProxy_build(JNIEnv *, jclass) {
+     auto world = Renderer::instance().world();
+     if (world == nullptr) return;
++    mcvr_cpu_frame::mark(mcvr_cpu_frame::EntityBegin);
+     world->entities()->build();
++    mcvr_cpu_frame::mark(mcvr_cpu_frame::EntityEnd);
+ }
+diff --git a/src/core/render/buffers.cpp b/src/core/render/buffers.cpp
+index 819e883..26f835c 100644
+--- a/src/core/render/buffers.cpp
++++ b/src/core/render/buffers.cpp
+@@ -1,5 +1,6 @@
+ 
+ #include "core/render/buffers.hpp"
++#include "core/render/dynamic_resolution.hpp"
+ 
+ #include "common/shared.hpp"
+ #include "core/render/chunks.hpp"
+@@ -454,6 +455,9 @@ void Buffers::setAndUploadWorldUniformBuffer(vk::Data::WorldUBO &ubo) {
+     }
+ 
+     ubo.cameraJitter = useJitter_ ? halton(sequenceIndex++) - glm::vec2(0.5) : glm::vec2(0.0);
++    ubo.renderSizePacked = mcvr::drs::active() ? (mcvr::drs::width() | mcvr::drs::height() << 16) : 0u;
++    ubo.prevRenderSizePacked =
++        mcvr::drs::active() ? (mcvr::drs::prevWidth() | mcvr::drs::prevHeight() << 16) : 0u;
+ 
+     auto world = Renderer::instance().world();
+     ubo.cameraPos.x = world->getCameraPos().x;
+diff --git a/src/core/render/dynamic_resolution.hpp b/src/core/render/dynamic_resolution.hpp
+new file mode 100644
+index 0000000..7848208
+--- /dev/null
++++ b/src/core/render/dynamic_resolution.hpp
+@@ -0,0 +1,290 @@
++#pragma once
++// RTX 5090 fork: dynamic render resolution for DLSS Ray Reconstruction.
++//
++// Every render-resolution image keeps its full size (the DLSS mode's optimal input size, the
++// "max" here). Each frame renders into the top-left sub-rectangle `renderSize()` of those images
++// and DLSS-RR is told the sub-rectangle, so the output stays 2560x1440 while the traced pixel
++// count follows the GPU load: a controller keeps the measured GPU frame time under a target
++// derived from the frame rate cap, lowering the render scale at once when a frame runs over and
++// raising it slowly when there is headroom.
++//
++// GPU time comes from four timestamps in the world command buffer: frame start, after the
++// acceleration structure builds, before the upscaler (between these two is the part that scales
++// with the pixel count) and after the world pipeline. A slot's
++// results are read when the slot is reused, after its fence was waited on, so reading never stalls.
++//
++// DLSS-RR spends ~14 ms of CPU on every render size change (measured 2026-09-25, driver 615.71,
++// DLSS 310.5.3, also between two sizes it used before), so the dynamic mode is off by default
++// and a fixed render scale is the practical use.
++//
++// Configuration (environment, read once):
++//   MCVR_RENDER_SCALE   fixed per-axis scale of the DLSS mode's render size, e.g. 0.8125
++//   MCVR_DRS            1 enables the dynamic controller (default off)
++//   MCVR_DRS_TARGET_MS  GPU time target; default 0.90 x the frame time of the fps cap (or of 141 fps)
++//   MCVR_DRS_MIN_SCALE  lowest per-axis scale relative to the max size (default 0.75, i.e. Quality
++//                       -> Performance at 1440p)
++//   MCVR_DRS_LEVELS     number of discrete render sizes from 1.0 down to the min scale (default 5).
++//                       DLSS-RR does expensive CPU work (tens of ms) when the render size changes to
++//                       one it has not used recently, so sizes are quantized and changed sparingly.
++//   MCVR_DRS_CYCLE      N: step through the levels every N frames (for measuring switch costs)
++//   MCVR_DRS_FIXED      "W H": force this render size (for measurements)
++//   MCVR_DRS_LOG        a file that gets one line per second with scale and GPU times
++//   MCVR_DRS_FRAME_LOG  a file that gets every frame's GPU times (prepare, scaled, total) as CSV
++#include "core/util/fork_config.hpp"
++#include "core/all_extern.hpp"
++
++#include <algorithm>
++#include <cmath>
++#include <cstdio>
++#include <cstdlib>
++#include <vector>
++
++namespace mcvr::drs {
++
++constexpr uint32_t kStamps = 4;
++
++struct Slot {
++    VkQueryPool pool = VK_NULL_HANDLE;
++    uint32_t written = 0;
++    bool pending = false;
++    uint32_t width = 0, height = 0;
++};
++
++struct State {
++    bool configured = false;
++    bool enabled = false;
++    bool dynamic = false;
++    float fixedScale = 0.0f;
++    double targetMs = 0.0; // 0: from the fps cap
++    float minScale = 0.75f;
++    uint32_t fixedWidth = 0, fixedHeight = 0;
++    int levels = 5;
++    int cycle = 0;
++    int level = 0; // current level, 0 = full size
++    int raiseFrames = 0;
++    FILE *log = nullptr;
++    FILE *frameLog = nullptr;
++
++    uint32_t maxWidth = 0, maxHeight = 0; // allocated render size
++    uint32_t minWidth = 0, minHeight = 0; // DLSS lower bound
++    uint32_t width = 0, height = 0;       // this frame
++    uint32_t prevWidth = 0, prevHeight = 0;
++    float scale = 1.0f; // per axis, relative to max
++
++    VkDevice device = VK_NULL_HANDLE;
++    double periodNs = 1.0;
++    std::vector<Slot> slots;
++    Slot *current = nullptr;
++    VkCommandBuffer cmd = VK_NULL_HANDLE;
++
++    // controller
++    double scaledMsEma = 0.0, fixedMsEma = 0.0, totalMsEma = 0.0;
++    int framesSinceDrop = 0;
++    // log
++    double logTotal = 0.0, logScaled = 0.0, logScale = 0.0, logMaxTotal = 0.0;
++    int logFrames = 0;
++    int logSwitches = 0;
++    uint64_t frameCounter = 0;
++};
++
++inline State &state() {
++    static State s;
++    return s;
++}
++
++inline void readConfig() {
++    State &s = state();
++    if (s.configured) return;
++    s.configured = true;
++    if (const char *v = std::getenv("MCVR_DRS")) s.dynamic = std::atoi(v) != 0;
++    if (const char *v = mcvr_fork::setting("MCVR_RENDER_SCALE")) s.fixedScale = std::clamp((float)std::atof(v), 0.3f, 1.0f);
++    if (const char *v = std::getenv("MCVR_DRS_TARGET_MS")) s.targetMs = std::atof(v);
++    if (const char *v = std::getenv("MCVR_DRS_MIN_SCALE")) s.minScale = std::clamp((float)std::atof(v), 0.3f, 1.0f);
++    if (const char *v = std::getenv("MCVR_DRS_FIXED")) std::sscanf(v, "%u %u", &s.fixedWidth, &s.fixedHeight);
++    if (const char *v = std::getenv("MCVR_DRS_LEVELS")) s.levels = std::clamp(std::atoi(v), 1, 32);
++    if (const char *v = std::getenv("MCVR_DRS_CYCLE")) s.cycle = std::max(0, std::atoi(v));
++    if (const char *v = std::getenv("MCVR_DRS_LOG")) s.log = std::fopen(v, "a");
++    if (const char *v = std::getenv("MCVR_DRS_FRAME_LOG")) {
++        s.frameLog = std::fopen(v, "w");
++        if (s.frameLog) std::fprintf(s.frameLog, "frame,prepare_ms,scaled_ms,total_ms,width,height\n");
++    }
++    s.enabled = s.dynamic || s.fixedScale > 0.0f || s.fixedWidth > 0 || s.cycle > 0 || s.frameLog != nullptr;
++}
++
++/** Called by the upscaler when its render-resolution images are (re)created. */
++inline void setLimits(uint32_t maxWidth, uint32_t maxHeight, uint32_t minWidth, uint32_t minHeight) {
++    readConfig();
++    State &s = state();
++    s.maxWidth = maxWidth;
++    s.maxHeight = maxHeight;
++    s.minWidth = std::min(minWidth, maxWidth);
++    s.minHeight = std::min(minHeight, maxHeight);
++    s.width = s.prevWidth = maxWidth;
++    s.height = s.prevHeight = maxHeight;
++    s.scale = 1.0f;
++    s.level = 0;
++    s.raiseFrames = 0;
++    s.scaledMsEma = s.fixedMsEma = s.totalMsEma = 0.0;
++    for (Slot &slot : s.slots) slot.pending = false;
++}
++
++inline bool active() {
++    State &s = state();
++    return s.enabled && s.maxWidth > 0;
++}
++
++/** Render size of the frame being recorded (the full image size when DRS is off). */
++inline uint32_t width() { return state().width; }
++inline uint32_t height() { return state().height; }
++inline uint32_t prevWidth() { return state().prevWidth; }
++inline uint32_t prevHeight() { return state().prevHeight; }
++
++inline double frameBudgetMs(uint32_t fpsCap) {
++    uint32_t fps = (fpsCap == 0 || fpsCap >= 260) ? 141 : fpsCap;
++    return 1000.0 / fps;
++}
++
++inline float levelScale(int level) {
++    State &s = state();
++    if (s.levels <= 1) return 1.0f;
++    return 1.0f - (1.0f - s.minScale) * (float)level / (float)(s.levels - 1);
++}
++
++inline void control(double totalMs, double scaledMs, uint32_t fpsCap) {
++    State &s = state();
++    double target = s.targetMs > 0.0 ? s.targetMs : 0.90 * frameBudgetMs(fpsCap);
++    double fixedMs = std::max(totalMs - scaledMs, 0.0);
++    // The scaled part is proportional to the pixel count of the frame it was measured on.
++    double measuredArea = std::max(1e-3, (double)s.current->width * s.current->height /
++                                             ((double)s.maxWidth * s.maxHeight));
++    double perFullFrame = scaledMs / measuredArea; // scaled cost at scale 1
++    s.fixedMsEma = s.fixedMsEma == 0.0 ? fixedMs : 0.9 * s.fixedMsEma + 0.1 * fixedMs;
++    s.scaledMsEma = s.scaledMsEma == 0.0 ? perFullFrame : 0.8 * s.scaledMsEma + 0.2 * perFullFrame;
++
++    double minArea = (double)s.minScale * s.minScale;
++    // Area that would meet the target with the costs just measured (fast, for drops) and with the
++    // smoothed costs (slow, for raises).
++    double available = target - std::max(fixedMs, s.fixedMsEma);
++    double areaNow = std::clamp(available / std::max(perFullFrame, 1e-3), minArea, 1.0);
++    double areaSmooth = std::clamp((target - s.fixedMsEma) / std::max(s.scaledMsEma, 1e-3), minArea, 1.0);
++    // Discrete levels: drop at once to the largest level that fits the frame just measured (3% margin);
++    // raise one level only after the smoothed costs have fit it with 5% to spare for a second.
++    auto levelArea = [&](int level) { return (double)levelScale(level) * levelScale(level); };
++    int level = s.level;
++    if (totalMs > target || areaNow * 0.97 < levelArea(level)) {
++        while (level < s.levels - 1 && levelArea(level) > areaNow * 0.97) level++;
++        s.raiseFrames = 0;
++    } else if (level > 0 && areaSmooth * 0.95 >= levelArea(level - 1) && areaNow * 0.95 >= levelArea(level - 1)) {
++        if (++s.raiseFrames > 144) {
++            level--;
++            s.raiseFrames = 0;
++        }
++    } else {
++        s.raiseFrames = 0;
++    }
++    s.level = level;
++    s.scale = levelScale(level);
++}
++
++/** Call right after the frame's world command buffer begins. Picks this frame's render size. */
++inline void beginFrame(VkDevice device, double timestampPeriodNs, uint32_t slotIndex, VkCommandBuffer cmd,
++                       uint32_t fpsCap) {
++    readConfig();
++    State &s = state();
++    s.prevWidth = s.width;
++    s.prevHeight = s.height;
++    s.current = nullptr;
++    if (!active()) {
++        return;
++    }
++    s.device = device;
++    s.periodNs = timestampPeriodNs;
++    if (s.slots.size() <= slotIndex) s.slots.resize(slotIndex + 1);
++    Slot &slot = s.slots[slotIndex];
++    if (slot.pool == VK_NULL_HANDLE) {
++        VkQueryPoolCreateInfo info{};
++        info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
++        info.queryType = VK_QUERY_TYPE_TIMESTAMP;
++        info.queryCount = kStamps;
++        if (vkCreateQueryPool(device, &info, nullptr, &slot.pool) != VK_SUCCESS) return;
++    } else if (slot.pending && slot.written == kStamps && slot.width > 0) {
++        uint64_t stamps[kStamps];
++        if (vkGetQueryPoolResults(device, slot.pool, 0, kStamps, sizeof(stamps), stamps, sizeof(uint64_t),
++                                  VK_QUERY_RESULT_64_BIT) == VK_SUCCESS &&
++            stamps[1] >= stamps[0] && stamps[2] >= stamps[1] && stamps[3] >= stamps[2]) {
++            double scaledMs = (stamps[2] - stamps[1]) * s.periodNs * 1e-6;
++            double totalMs = (stamps[3] - stamps[0]) * s.periodNs * 1e-6;
++            if (s.frameLog) {
++                std::fprintf(s.frameLog, "%llu,%.4f,%.4f,%.4f,%u,%u\n", (unsigned long long)s.frameCounter,
++                             (stamps[1] - stamps[0]) * s.periodNs * 1e-6, scaledMs, totalMs, slot.width, slot.height);
++            }
++            s.current = &slot;
++            if (s.dynamic) control(totalMs, scaledMs, fpsCap);
++            s.logTotal += totalMs;
++            s.logScaled += scaledMs;
++            s.logMaxTotal = std::max(s.logMaxTotal, totalMs);
++            s.logScale += s.scale;
++            s.logFrames++;
++        }
++    }
++    slot.pending = false;
++
++    if (s.cycle > 0) {
++        s.level = (int)((s.frameCounter / s.cycle) % s.levels);
++        s.scale = levelScale(s.level);
++    }
++    if (s.fixedScale > 0.0f && s.fixedWidth == 0 && !s.dynamic && s.cycle == 0) {
++        s.width = std::clamp((uint32_t)std::lround(s.maxWidth * s.fixedScale) & ~1u, s.minWidth, s.maxWidth);
++        s.height = std::clamp((uint32_t)std::lround(s.maxHeight * s.fixedScale) & ~1u, s.minHeight, s.maxHeight);
++    } else if (s.fixedWidth > 0) {
++        s.width = std::clamp(s.fixedWidth, 1u, s.maxWidth);
++        s.height = std::clamp(s.fixedHeight, 1u, s.maxHeight);
++    } else {
++        // Even sizes, never below the DLSS minimum; the full size is used exactly at level 0.
++        s.width = s.level == 0 ? s.maxWidth
++                               : std::clamp((uint32_t)std::lround(s.maxWidth * s.scale) & ~1u, s.minWidth, s.maxWidth);
++        s.height = s.level == 0 ? s.maxHeight
++                                : std::clamp((uint32_t)std::lround(s.maxHeight * s.scale) & ~1u, s.minHeight,
++                                             s.maxHeight);
++    }
++
++    if (s.width != s.prevWidth || s.height != s.prevHeight) s.logSwitches++;
++    if (s.log && s.logFrames >= 144) {
++        std::fprintf(s.log, "{\"frame\":%llu,\"scale\":%.3f,\"gpu_ms\":%.3f,\"gpu_max_ms\":%.3f,\"scaled_ms\":%.3f,"
++                            "\"size\":[%u,%u],\"level\":%d,\"switches\":%d}\n",
++                     (unsigned long long)s.frameCounter, s.logScale / s.logFrames, s.logTotal / s.logFrames,
++                     s.logMaxTotal, s.logScaled / s.logFrames, s.width, s.height, s.level, s.logSwitches);
++        s.logSwitches = 0;
++        std::fflush(s.log);
++        s.logTotal = s.logScaled = s.logScale = s.logMaxTotal = 0.0;
++        s.logFrames = 0;
++    }
++    s.frameCounter++;
++
++    vkCmdResetQueryPool(cmd, slot.pool, 0, kStamps);
++    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, slot.pool, 0);
++    slot.written = 1;
++    slot.pending = true;
++    slot.width = s.width;
++    slot.height = s.height;
++    s.current = &slot;
++    s.cmd = cmd;
++}
++
++inline void stamp(VkCommandBuffer cmd, uint32_t index) {
++    State &s = state();
++    if (s.current == nullptr || s.current->written != index) return;
++    vkCmdWriteTimestamp(cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, s.current->pool, index);
++    s.current->written = index + 1;
++}
++
++/** After the acceleration structure builds: from here on the work scales with the render size. */
++inline void stampAfterPrepare(VkCommandBuffer cmd) { stamp(cmd, 1); }
++
++/** Before the upscaler. */
++inline void stampBeforeUpscale(VkCommandBuffer cmd) { stamp(cmd, 2); }
++
++/** After the world pipeline. */
++inline void stampEnd(VkCommandBuffer cmd) { stamp(cmd, 3); }
++
++} // namespace mcvr::drs
+diff --git a/src/core/render/modules/world/dlss/dlss_module.cpp b/src/core/render/modules/world/dlss/dlss_module.cpp
+index ff0541c..8369b14 100644
+--- a/src/core/render/modules/world/dlss/dlss_module.cpp
++++ b/src/core/render/modules/world/dlss/dlss_module.cpp
+@@ -4,6 +4,7 @@
+ #include "core/render/pipeline.hpp"
+ #include "core/render/render_framework.hpp"
+ #include "core/render/renderer.hpp"
++#include "core/render/dynamic_resolution.hpp"
+ 
+ #include <algorithm>
+ 
+@@ -97,6 +98,15 @@ bool DLSSModule::setOrCreateInputImages(std::vector<std::shared_ptr<vk::DeviceLo
+ 
+     inputWidth_ = supportedSizes_.optimalSize.width;
+     inputHeight_ = supportedSizes_.optimalSize.height;
++    // RTX 5090 fork: the images keep the mode's optimal size; dynamic resolution renders a
++    // sub-rectangle of them, never below what DLSS accepts for this mode.
++    if (frameIndex == 0) {
++        std::cerr << "[DLSS] render size " << inputWidth_ << "x" << inputHeight_ << " (DLSS range "
++                  << supportedSizes_.minSize.width << "x" << supportedSizes_.minSize.height << " - "
++                  << supportedSizes_.maxSize.width << "x" << supportedSizes_.maxSize.height << ")" << std::endl;
++        mcvr::drs::setLimits(inputWidth_, inputHeight_, supportedSizes_.minSize.width,
++                             supportedSizes_.minSize.height);
++    }
+ 
+     if (images[0] == nullptr) {
+         hdrImages_[frameIndex] = images[0] = vk::DeviceLocalImage::create(
+@@ -356,6 +366,11 @@ void DLSSModuleContext::render() {
+     auto mainQueueIndex = framework->physicalDevice()->mainQueueIndex();
+ 
+     auto module = dLSSModule.lock();
++    // RTX 5090 fork: this frame's render size (a sub-rectangle of the input images).
++    const uint32_t renderWidth =
++        mcvr::drs::active() ? std::min(mcvr::drs::width(), module->inputWidth_) : module->inputWidth_;
++    const uint32_t renderHeight =
++        mcvr::drs::active() ? std::min(mcvr::drs::height(), module->inputHeight_) : module->inputHeight_;
+ 
+     auto dispatchUpscaledFirstHitDepth = [&]() {
+         worldCommandBuffer->barriersBufferImage(
+@@ -389,10 +404,10 @@ void DLSSModuleContext::render() {
+         motionDescriptorTable->bindImage(upscaledFirstHitDepthImage, VK_IMAGE_LAYOUT_GENERAL, 0, 1);
+ 
+         MotionUpscalePushConstants pushConstants{
+-            static_cast<float>(module->outputWidth_) / static_cast<float>(std::max(1u, module->inputWidth_)),
+-            static_cast<float>(module->outputHeight_) / static_cast<float>(std::max(1u, module->inputHeight_)),
+-            module->inputWidth_,
+-            module->inputHeight_,
++            static_cast<float>(module->outputWidth_) / static_cast<float>(std::max(1u, renderWidth)),
++            static_cast<float>(module->outputHeight_) / static_cast<float>(std::max(1u, renderHeight)),
++            renderWidth,
++            renderHeight,
+             module->outputWidth_,
+             module->outputHeight_,
+         };
+@@ -437,10 +452,10 @@ void DLSSModuleContext::render() {
+         motionDescriptorTable->bindImage(upscaledMotionVectorImage, VK_IMAGE_LAYOUT_GENERAL, 0, 4);
+ 
+         MotionUpscalePushConstants pushConstants{
+-            static_cast<float>(module->outputWidth_) / static_cast<float>(std::max(1u, module->inputWidth_)),
+-            static_cast<float>(module->outputHeight_) / static_cast<float>(std::max(1u, module->inputHeight_)),
+-            module->inputWidth_,
+-            module->inputHeight_,
++            static_cast<float>(module->outputWidth_) / static_cast<float>(std::max(1u, renderWidth)),
++            static_cast<float>(module->outputHeight_) / static_cast<float>(std::max(1u, renderHeight)),
++            renderWidth,
++            renderHeight,
+             module->outputWidth_,
+             module->outputHeight_,
+         };
+@@ -485,10 +500,10 @@ void DLSSModuleContext::render() {
+         motionDescriptorTable->bindImage(upscaledNormalRoughnessImage, VK_IMAGE_LAYOUT_GENERAL, 0, 6);
+ 
+         MotionUpscalePushConstants pushConstants{
+-            static_cast<float>(module->outputWidth_) / static_cast<float>(std::max(1u, module->inputWidth_)),
+-            static_cast<float>(module->outputHeight_) / static_cast<float>(std::max(1u, module->inputHeight_)),
+-            module->inputWidth_,
+-            module->inputHeight_,
++            static_cast<float>(module->outputWidth_) / static_cast<float>(std::max(1u, renderWidth)),
++            static_cast<float>(module->outputHeight_) / static_cast<float>(std::max(1u, renderHeight)),
++            renderWidth,
++            renderHeight,
+             module->outputWidth_,
+             module->outputHeight_,
+         };
+@@ -612,7 +627,7 @@ void DLSSModuleContext::render() {
+         auto worldUBO = static_cast<vk::Data::WorldUBO *>(worldUBOBuffer->mappedPtr());
+         if (worldUBO != nullptr) {
+             glm::vec2 jitter = worldUBO->cameraJitter;
+-            module->dlss_->denoise(worldCommandBuffer, glm::uvec2{module->inputWidth_, module->inputHeight_}, jitter,
++            module->dlss_->denoise(worldCommandBuffer, glm::uvec2{renderWidth, renderHeight}, jitter,
+                                    worldUBO->cameraViewMat, worldUBO->cameraProjMat);
+         }
+     }
+diff --git a/src/core/render/modules/world/dlss/dlss_wrapper.cpp b/src/core/render/modules/world/dlss/dlss_wrapper.cpp
+index d1bf037..bf340b9 100644
+--- a/src/core/render/modules/world/dlss/dlss_wrapper.cpp
++++ b/src/core/render/modules/world/dlss/dlss_wrapper.cpp
+@@ -37,8 +37,11 @@
+  * along with this program. If not, see <http://www.gnu.org/licenses/>.
+  */
+ 
++#include "core/util/fork_config.hpp"
+ #include "core/render/modules/world/dlss/dlss_wrapper.hpp"
+ 
++#include <cstdlib>
++
+ // #include <nvh/nvprint.hpp>
+ // #include <nvp/nvpsystem.hpp>
+ // #include <nvvk/commands_vk.hpp>
+@@ -322,11 +325,14 @@ NVSDK_NGX_Result DlssRR::init(std::shared_ptr<vk::Device> device,
+     const uint32_t visibilityNodeMask = 0x1;
+ 
+     // This allows you to switch "presets", i.e. different models for the denoiser
+-    m_ngxParams->Set(NVSDK_NGX_Parameter_RayReconstruction_Hint_Render_Preset_Quality, info.preset);
+-    m_ngxParams->Set(NVSDK_NGX_Parameter_RayReconstruction_Hint_Render_Preset_UltraQuality, info.preset);
+-    m_ngxParams->Set(NVSDK_NGX_Parameter_RayReconstruction_Hint_Render_Preset_Balanced, info.preset);
+-    m_ngxParams->Set(NVSDK_NGX_Parameter_RayReconstruction_Hint_Render_Preset_Performance, info.preset);
+-    m_ngxParams->Set(NVSDK_NGX_Parameter_RayReconstruction_Hint_Render_Preset_UltraPerformance, info.preset);
++    // RTX 5090 fork: MCVR_DLSS_RR_PRESET (the NGX preset number) overrides it, for measurements.
++    unsigned int preset = info.preset;
++    if (const char *override = mcvr_fork::setting("MCVR_DLSS_RR_PRESET")) { preset = std::strtoul(override, nullptr, 10); }
++    m_ngxParams->Set(NVSDK_NGX_Parameter_RayReconstruction_Hint_Render_Preset_Quality, preset);
++    m_ngxParams->Set(NVSDK_NGX_Parameter_RayReconstruction_Hint_Render_Preset_UltraQuality, preset);
++    m_ngxParams->Set(NVSDK_NGX_Parameter_RayReconstruction_Hint_Render_Preset_Balanced, preset);
++    m_ngxParams->Set(NVSDK_NGX_Parameter_RayReconstruction_Hint_Render_Preset_Performance, preset);
++    m_ngxParams->Set(NVSDK_NGX_Parameter_RayReconstruction_Hint_Render_Preset_UltraPerformance, preset);
+ 
+     {
+         std::shared_ptr<vk::CommandBuffer> cmdBuffer = vk::CommandBuffer::create(device, cmdPool);
+diff --git a/src/core/render/modules/world/ray_tracing/ray_tracing_module.cpp b/src/core/render/modules/world/ray_tracing/ray_tracing_module.cpp
+index 800a7cb..83cba13 100644
+--- a/src/core/render/modules/world/ray_tracing/ray_tracing_module.cpp
++++ b/src/core/render/modules/world/ray_tracing/ray_tracing_module.cpp
+@@ -1,3 +1,6 @@
++#include "common/profiler.hpp"
++#include "core/util/gpu_timing.hpp"
++#include "core/render/dynamic_resolution.hpp"
+ #include "core/render/modules/world/ray_tracing/ray_tracing_module.hpp"
+ 
+ #include "common/hit_group_registry.hpp"
+@@ -401,12 +404,18 @@ std::vector<ExpressionEvaluator::Variable> RayTracingModule::executionExpression
+     std::vector<ExpressionEvaluator::Variable> variables;
+     variables.reserve(8);
+ 
+-    const uint32_t renderWidth = hdrNoisyOutputImages_.empty() || hdrNoisyOutputImages_[0] == nullptr ?
+-                                     0u :
+-                                     hdrNoisyOutputImages_[0]->width();
+-    const uint32_t renderHeight = hdrNoisyOutputImages_.empty() || hdrNoisyOutputImages_[0] == nullptr ?
+-                                      0u :
+-                                      hdrNoisyOutputImages_[0]->height();
++    uint32_t renderWidth = hdrNoisyOutputImages_.empty() || hdrNoisyOutputImages_[0] == nullptr ?
++                               0u :
++                               hdrNoisyOutputImages_[0]->width();
++    uint32_t renderHeight = hdrNoisyOutputImages_.empty() || hdrNoisyOutputImages_[0] == nullptr ?
++                                0u :
++                                hdrNoisyOutputImages_[0]->height();
++    // RTX 5090 fork: dynamic resolution. Only pass dispatches use the frame's render size; resource
++    // sizes (evaluated outside of pass recording) keep the full image size.
++    if (dispatchWithDynamicSize_ && mcvr::drs::active()) {
++        renderWidth = std::min(renderWidth, mcvr::drs::width());
++        renderHeight = std::min(renderHeight, mcvr::drs::height());
++    }
+     variables.push_back({.name = "RENDER_WIDTH", .value = static_cast<double>(renderWidth)});
+     variables.push_back({.name = "RENDER_HEIGHT", .value = static_cast<double>(renderHeight)});
+ 
+@@ -1469,6 +1478,7 @@ void RayTracingModule::renderSharcUpdateAndResolve(
+         .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT,
+     }});
+ 
++    mcvr_gpu_timing::stamp("rt.sharc_resolve");
+     worldCommandBuffer->bindDescriptorTable(context.rayTracingDescriptorTable, VK_PIPELINE_BIND_POINT_COMPUTE)
+         ->bindComputePipeline(pass.sharcResolvePipeline);
+     vkCmdDispatch(worldCommandBuffer->vkCommandBuffer(),
+@@ -1878,7 +1888,10 @@ void RayTracingModuleContext::render() {
+     rayTracingDescriptorTable->bindBuffer(buffers->lastWorldUniformBuffer(), 2, 1);
+     rayTracingDescriptorTable->bindBuffer(buffers->skyUniformBuffer(), 2, 2);
+ 
++    mcvr_gpu_timing::stamp("rt.worldPrepare");
+     worldPrepareContext->render();
++    mcvr_gpu_timing::stamp("rt.afterPrepare");
++    mcvr::drs::stampAfterPrepare(worldCommandBuffer->vkCommandBuffer());
+     if (Renderer::options.collectChunkEmission && chunks != nullptr && chunks->chunkPackedData() != nullptr) {
+         rayTracingDescriptorTable->bindBuffer(chunks->chunkPackedData(), 1, 9);
+     }
+@@ -1906,6 +1919,7 @@ void RayTracingModuleContext::render() {
+                           });
+     }
+ 
++    module->dispatchWithDynamicSize_ = true;
+     if (module->hasSharcRuntime_ && module->isSharcEnabled_ && module->sharcUpdatePass_ != nullptr) {
+         auto &updateVariables = variables;
+         if (module->sharcUpdatePass_->executionBuffer != nullptr) {
+@@ -1916,10 +1930,14 @@ void RayTracingModuleContext::render() {
+                 VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR |
+                     VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+         }
++        mcvr_gpu_timing::stamp("rt.sharc");
++        RAD_PROFILE_SCOPE("rt.cpu.sharc");
+         module->renderSharcUpdateAndResolve(*module->sharcUpdatePass_, *this, updateVariables);
+     }
+ 
+     auto executePass = [&](const std::string &passName, ShaderPack::ExecutionVariables &passVariables) {
++        mcvr_gpu_timing::stamp("rt.pass." + passName);
++        RAD_PROFILE_SCOPE(mcvr_gpu_timing::intern("rt.cpu.pass." + passName));
+         auto passIter = module->passNameToPass_.find(passName);
+         if (passIter == module->passNameToPass_.end()) { throw std::runtime_error("unknown pass: " + passName); }
+ 
+@@ -1948,6 +1966,7 @@ void RayTracingModuleContext::render() {
+         ShaderPackLoader::Stage::RayTracing,
+         module->shaderPack_->execution(ShaderPackLoader::Stage::RayTracing).commands, variables,
+         module->executionExpressionVariables(), true, RayTracingModule::executionLoopLimit, executePass);
++    module->dispatchWithDynamicSize_ = false;
+ 
+     for (auto &[name, value] : module->globalVariables_) {
+         auto iter = variables.find(name);
+diff --git a/src/core/render/modules/world/ray_tracing/ray_tracing_module.hpp b/src/core/render/modules/world/ray_tracing/ray_tracing_module.hpp
+index 302ff92..e5075e0 100644
+--- a/src/core/render/modules/world/ray_tracing/ray_tracing_module.hpp
++++ b/src/core/render/modules/world/ray_tracing/ray_tracing_module.hpp
+@@ -1,5 +1,9 @@
+ #pragma once
+ 
++#include "core/util/fork_config.hpp"
++#include <algorithm>
++#include <cstdlib>
++
+ #include "common/shared.hpp"
+ #include "common/singleton.hpp"
+ #include "core/all_extern.hpp"
+@@ -225,6 +229,8 @@ class RayTracingModule : public WorldModule, public SharedObject<RayTracingModul
+ 
+     std::unordered_map<std::string, ShaderPackLoader::VariableConfig> executionVariableConfigs_;
+     std::unordered_map<std::string, std::string> globalVariables_;
++    // RTX 5090 fork: true while passes are recorded, so dispatches use the dynamic render size.
++    mutable bool dispatchWithDynamicSize_ = false;
+     std::unordered_map<std::string, std::string> staticAttributes_;
+ 
+     std::vector<std::shared_ptr<vk::DeviceLocalImage>> hdrNoisyOutputImages_;
+diff --git a/src/core/render/pipeline.cpp b/src/core/render/pipeline.cpp
+index ca87bb8..4aeecfa 100644
+--- a/src/core/render/pipeline.cpp
++++ b/src/core/render/pipeline.cpp
+@@ -1,3 +1,8 @@
++#include <typeinfo>
++#include "common/profiler.hpp"
++#include "core/util/gpu_timing.hpp"
++#include "core/render/dynamic_resolution.hpp"
++#include "core/render/modules/world/dlss/dlss_module.hpp"
+ #include "core/render/pipeline.hpp"
+ 
+ #include "core/render/render_framework.hpp"
+@@ -233,7 +238,16 @@ void WorldPipelineContext::render() {
+         outputImage->imageLayout() = targetLayout;
+     }
+ 
+-    for (int i = 0; i < worldModuleContexts.size(); i++) { worldModuleContexts[i]->render(); }
++    for (int i = 0; i < worldModuleContexts.size(); i++) {
++        mcvr_gpu_timing::stamp(std::string("module.") + typeid(*worldModuleContexts[i]).name());
++        if (dynamic_cast<DLSSModuleContext *>(worldModuleContexts[i].get()) != nullptr) {
++            mcvr::drs::stampBeforeUpscale(worldCommandBuffer->vkCommandBuffer());
++        }
++        RAD_PROFILE_SCOPE(typeid(*worldModuleContexts[i]).name());
++        worldModuleContexts[i]->render();
++    }
++    mcvr_gpu_timing::stamp("end");
++    mcvr::drs::stampEnd(worldCommandBuffer->vkCommandBuffer());
+ 
+     worldCommandBuffer->barriersBufferImage(
+         {}, {{
+diff --git a/src/core/render/render_framework.cpp b/src/core/render/render_framework.cpp
+index 570d7d5..00ef7fc 100644
+--- a/src/core/render/render_framework.cpp
++++ b/src/core/render/render_framework.cpp
+@@ -1,3 +1,5 @@
++#include "core/util/gpu_timing.hpp"
++#include "core/render/dynamic_resolution.hpp"
+ #include "core/render/render_framework.hpp"
+ 
+ #include "common/profiler.hpp"
+@@ -238,6 +240,10 @@ void Framework::acquireContext() {
+         RAD_PROFILE_SCOPE("framework.command_buffers_begin");
+         currentContext_->uploadCommandBuffer->begin();
+         currentContext_->worldCommandBuffer->begin();
++        mcvr_gpu_timing::beginFrame(device_->vkDevice(), physicalDevice_->properties().limits.timestampPeriod,
++                                    imageIndex, currentContext_->worldCommandBuffer->vkCommandBuffer());
++        mcvr::drs::beginFrame(device_->vkDevice(), physicalDevice_->properties().limits.timestampPeriod, imageIndex,
++                              currentContext_->worldCommandBuffer->vkCommandBuffer(), effectiveFrameRateLimit());
+         currentContext_->overlayCommandBuffer->begin();
+         currentContext_->fuseCommandBuffer->begin();
+     }
+diff --git a/src/core/util/cpu_frame_log.hpp b/src/core/util/cpu_frame_log.hpp
+new file mode 100644
+index 0000000..98035b9
+--- /dev/null
++++ b/src/core/util/cpu_frame_log.hpp
+@@ -0,0 +1,74 @@
++#pragma once
++// RTX 5090 fork: per-frame render-thread timeline, for finding CPU-side frame spikes.
++// Enabled when MCVR_CPU_FRAME_LOG names a file. The JNI entry points mark checkpoints; each frame
++// (acquireContext to the next acquireContext) becomes one CSV line with every checkpoint's offset in ms
++// from the frame start. The gaps between native checkpoints are Java work on the render thread.
++// Each line also carries the frame start as Unix time (ms, for matching JFR samples) and every engine
++// profiler zone that took >= 0.1 ms on the render thread in that frame (name=ms; needs MCVR_TIMING_FILE,
++// which turns the profiler on).
++#include "common/profiler.hpp"
++#include <array>
++#include <chrono>
++#include <cstdio>
++#include <cstdlib>
++#include <map>
++#include <string>
++
++namespace mcvr_cpu_frame {
++
++enum Mark { AcquireBegin, AcquireEnd, EntityBegin, EntityEnd, SubmitBegin, SubmitEnd, PresentBegin, PresentEnd, Count };
++
++struct State {
++    FILE *out = nullptr;
++    std::array<double, Count> t{};
++    std::chrono::steady_clock::time_point start{};
++    double startUnixMs = 0.0;
++    std::map<std::string, double> previousZoneMs;
++    unsigned long long frame = 0;
++    bool started = false;
++    State() {
++        if (const char *path = std::getenv("MCVR_CPU_FRAME_LOG")) {
++            out = std::fopen(path, "w");
++            if (out) std::fprintf(out, "frame,unix_ms,total,acquire_end,entity_begin,entity_end,submit_begin,submit_end,present_begin,present_end,zones\n");
++        }
++    }
++};
++
++inline State &state() {
++    static State s;
++    return s;
++}
++
++inline void mark(Mark m) {
++    State &s = state();
++    if (s.out == nullptr) return;
++    auto now = std::chrono::steady_clock::now();
++    if (m == AcquireBegin) {
++        if (s.started) {
++            double total = std::chrono::duration<double, std::milli>(now - s.start).count();
++            std::fprintf(s.out, "%llu,%.3f,%.3f", s.frame++, s.startUnixMs, total);
++            for (int i = AcquireEnd; i < Count; i++) std::fprintf(s.out, ",%.3f", s.t[i]);
++            if (mcvr::profiler::Profiler::isEnabled()) {
++                mcvr::profiler::Profiler::flushCurrentThread();
++                std::fputc(',', s.out);
++                for (auto &zone : mcvr::profiler::Profiler::snapshot().zones) {
++                    double &previous = s.previousZoneMs[zone.name];
++                    if (zone.totalMilliseconds < previous) previous = 0.0; // the 300-frame timing reset
++                    double delta = zone.totalMilliseconds - previous;
++                    previous = zone.totalMilliseconds;
++                    if (delta >= 0.1) std::fprintf(s.out, "%s=%.3f;", zone.name.c_str(), delta);
++                }
++            }
++            std::fputc('\n', s.out);
++        }
++        s.start = now;
++        s.startUnixMs =
++            std::chrono::duration<double, std::milli>(std::chrono::system_clock::now().time_since_epoch()).count();
++        s.started = true;
++        s.t.fill(-1.0);
++        return;
++    }
++    if (s.started) s.t[m] = std::chrono::duration<double, std::milli>(now - s.start).count();
++}
++
++} // namespace mcvr_cpu_frame
+diff --git a/src/core/util/fork_config.hpp b/src/core/util/fork_config.hpp
+new file mode 100644
+index 0000000..527514a
+--- /dev/null
++++ b/src/core/util/fork_config.hpp
+@@ -0,0 +1,43 @@
++#pragma once
++// RTX 5090 fork: settings for the fork's engine features. Each setting is read from its environment
++// variable (e.g. MCVR_RENDER_SCALE) or, when that is not set, from the same key in
++// <game dir>/radiance/fork.properties (KEY=VALUE lines, '#' comments). The file survives launcher
++// settings rewrites, so the play instance keeps its render scale there.
++#include <cstdlib>
++#include <fstream>
++#include <map>
++#include <string>
++
++namespace mcvr_fork {
++
++inline const std::map<std::string, std::string> &fileSettings() {
++    static const std::map<std::string, std::string> settings = [] {
++        std::map<std::string, std::string> result;
++        std::ifstream in("radiance/fork.properties");
++        std::string line;
++        while (std::getline(in, line)) {
++            auto start = line.find_first_not_of(" \t");
++            if (start == std::string::npos || line[start] == '#') continue;
++            auto eq = line.find('=', start);
++            if (eq == std::string::npos) continue;
++            auto trim = [](std::string s) {
++                auto a = s.find_first_not_of(" \t\r");
++                auto b = s.find_last_not_of(" \t\r");
++                return a == std::string::npos ? std::string() : s.substr(a, b - a + 1);
++            };
++            result[trim(line.substr(start, eq - start))] = trim(line.substr(eq + 1));
++        }
++        return result;
++    }();
++    return settings;
++}
++
++/** The setting's value, or nullptr when neither the environment nor fork.properties sets it. */
++inline const char *setting(const char *name) {
++    if (const char *v = std::getenv(name)) return v;
++    auto &settings = fileSettings();
++    auto it = settings.find(name);
++    return it == settings.end() ? nullptr : it->second.c_str();
++}
++
++} // namespace mcvr_fork
+diff --git a/src/core/util/gpu_timing.hpp b/src/core/util/gpu_timing.hpp
+new file mode 100644
+index 0000000..3258656
+--- /dev/null
++++ b/src/core/util/gpu_timing.hpp
+@@ -0,0 +1,130 @@
++#pragma once
++// RTX 5090 fork: GPU time per world-render section, from Vulkan timestamps.
++// Enabled only when MCVR_TIMING_FILE is set. One query pool per frame slot;
++// a slot's results are read when it is reused, after its fence was waited on,
++// so reading never stalls. The time between consecutive stamps is charged to
++// the name of the earlier stamp. Every 300 frames the per-frame averages are
++// appended to MCVR_TIMING_FILE as one JSON line with "gpu." keys.
++// MCVR_TIMING_FRAMES (optional, a file path) also writes every frame's section times, one CSV-ish
++// line per frame: index followed by name=ms pairs.
++#include "core/all_extern.hpp"
++#include "common/profiler.hpp"
++#include <cstdio>
++#include <cstdlib>
++#include <map>
++#include <mutex>
++#include <set>
++#include <string>
++#include <vector>
++
++namespace mcvr_gpu_timing {
++
++constexpr uint32_t kMaxStamps = 128;
++
++struct Slot {
++    VkQueryPool pool = VK_NULL_HANDLE;
++    std::vector<std::string> names;
++    bool pending = false;
++};
++
++struct State {
++    const char *path = std::getenv("MCVR_TIMING_FILE");
++    FILE *framesOut = std::getenv("MCVR_TIMING_FRAMES") ? std::fopen(std::getenv("MCVR_TIMING_FRAMES"), "w") : nullptr;
++    uint64_t frameIndex = 0;
++    VkDevice device = VK_NULL_HANDLE;
++    double periodNs = 1.0;
++    std::vector<Slot> slots;
++    Slot *current = nullptr;
++    VkCommandBuffer cmd = VK_NULL_HANDLE;
++    std::map<std::string, double> totals;
++    int frames = 0;
++    bool frames_file() const { return framesOut != nullptr; }
++};
++
++inline State &state() {
++    static State s;
++    return s;
++}
++
++inline bool enabled() { return state().path != nullptr; }
++
++/** Stable C string for profiler zone names built at runtime (the profiler keeps the pointer). */
++inline const char *intern(const std::string &name) {
++    static std::mutex mutex;
++    static std::set<std::string> names;
++    std::lock_guard lock(mutex);
++    return names.insert(name).first->c_str();
++}
++
++inline void collect(Slot &slot) {
++    State &s = state();
++    if (!slot.pending || slot.names.size() < 2) return;
++    std::vector<uint64_t> stamps(slot.names.size());
++    VkResult r = vkGetQueryPoolResults(s.device, slot.pool, 0, (uint32_t)stamps.size(),
++                                       stamps.size() * sizeof(uint64_t), stamps.data(), sizeof(uint64_t),
++                                       VK_QUERY_RESULT_64_BIT);
++    if (r != VK_SUCCESS) return;
++    if (s.frames_file()) std::fprintf(s.framesOut, "%llu", (unsigned long long)s.frameIndex++);
++    for (size_t i = 0; i + 1 < stamps.size(); i++) {
++        if (stamps[i + 1] >= stamps[i]) {
++            double ms = (stamps[i + 1] - stamps[i]) * s.periodNs * 1e-6;
++            s.totals[slot.names[i]] += ms;
++            if (s.framesOut) std::fprintf(s.framesOut, ",%s=%.4f", slot.names[i].c_str(), ms);
++        }
++    }
++    if (s.framesOut) std::fputc('\n', s.framesOut);
++    if (++s.frames >= 300) {
++        if (FILE *f = std::fopen(s.path, "a")) {
++            std::fprintf(f, "{\"gpu_frames\":%d", s.frames);
++            for (auto &[name, ms] : s.totals) std::fprintf(f, ",\"gpu.%s\":%.4f", name.c_str(), ms / s.frames);
++            // CPU zones from the engine profiler: ms per frame and the worst single call.
++            mcvr::profiler::Profiler::flushCurrentThread();
++            for (auto &zone : mcvr::profiler::Profiler::snapshot().zones) {
++                std::fprintf(f, ",\"cpu.%s\":%.4f,\"cpumax.%s\":%.4f", zone.name.c_str(),
++                             zone.totalMilliseconds / s.frames, zone.name.c_str(),
++                             mcvr::profiler::Profiler::ticksToMilliseconds(zone.maxTicks));
++            }
++            mcvr::profiler::Profiler::reset();
++            std::fprintf(f, "}\n");
++            std::fclose(f);
++        }
++        s.totals.clear();
++        s.frames = 0;
++    }
++}
++
++// Call right after the frame's world command buffer begins.
++inline void beginFrame(VkDevice device, double timestampPeriodNs, uint32_t slotIndex, VkCommandBuffer cmd) {
++    if (!enabled()) return;
++    State &s = state();
++    if (!mcvr::profiler::Profiler::isEnabled()) mcvr::profiler::Profiler::setEnabled(true);
++    s.device = device;
++    s.periodNs = timestampPeriodNs;
++    if (s.slots.size() <= slotIndex) s.slots.resize(slotIndex + 1);
++    Slot &slot = s.slots[slotIndex];
++    if (slot.pool == VK_NULL_HANDLE) {
++        VkQueryPoolCreateInfo info{};
++        info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
++        info.queryType = VK_QUERY_TYPE_TIMESTAMP;
++        info.queryCount = kMaxStamps;
++        if (vkCreateQueryPool(device, &info, nullptr, &slot.pool) != VK_SUCCESS) return;
++    } else {
++        collect(slot);
++    }
++    vkCmdResetQueryPool(cmd, slot.pool, 0, kMaxStamps);
++    slot.names.clear();
++    slot.pending = true;
++    s.current = &slot;
++    s.cmd = cmd;
++}
++
++inline void stamp(const std::string &name) {
++    if (!enabled()) return;
++    State &s = state();
++    if (s.current == nullptr || s.current->names.size() >= kMaxStamps) return;
++    vkCmdWriteTimestamp(s.cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, s.current->pool,
++                        (uint32_t)s.current->names.size());
++    s.current->names.push_back(name);
++}
++
++} // namespace mcvr_gpu_timing
+diff --git a/src/shader/world/ray_tracing/internal/advanced/common/render_size.glsl b/src/shader/world/ray_tracing/internal/advanced/common/render_size.glsl
+new file mode 100644
+index 0000000..40a8345
+--- /dev/null
++++ b/src/shader/world/ray_tracing/internal/advanced/common/render_size.glsl
+@@ -0,0 +1,22 @@
++#ifndef ADV_RENDER_SIZE_GLSL
++#define ADV_RENDER_SIZE_GLSL
++
++// RTX 5090 fork: dynamic resolution. Render-resolution images keep their full size and a frame
++// renders into the top-left sub-rectangle given by WorldUBO.renderSizePacked (width | height << 16,
++// 0 when dynamic resolution is off). prevRenderSizePacked is the previous frame's size, for
++// temporal reprojection into last frame's images.
++ivec2 advUnpackRenderSize(uint packedSize, ivec2 fullSize) {
++    if (packedSize == 0u) { return fullSize; }
++    return min(ivec2(int(packedSize & 0xFFFFu), int(packedSize >> 16u)), fullSize);
++}
++
++// A pixel position (pixel centers at +0.5) in this frame's render size, in last frame's.
++vec2 advToPrevRenderPixel(vec2 pixelCenter, ivec2 currentSize, ivec2 prevSize) {
++    return pixelCenter * vec2(prevSize) / vec2(currentSize);
++}
++
++ivec2 advDownsampledSize(ivec2 size, int factor) {
++    return (size + ivec2(factor - 1)) / factor;
++}
++
++#endif
+diff --git a/src/shader/world/ray_tracing/internal/advanced/generate_initial_samples/generate_initial_samples.comp b/src/shader/world/ray_tracing/internal/advanced/generate_initial_samples/generate_initial_samples.comp
+index 52845ab..8c013d2 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/generate_initial_samples/generate_initial_samples.comp
++++ b/src/shader/world/ray_tracing/internal/advanced/generate_initial_samples/generate_initial_samples.comp
+@@ -15,6 +15,7 @@
+ #include "util/ray_cone.glsl"
+ #include "util/sampling_helpers.glsl"
+ #include "common/first_hit_state.glsl"
++#include "common/render_size.glsl"
+ #define ADV_RUNTIME_PRIMARY_SECONDARY_READONLY 1
+ #include "common/runtime_primary_secondary_arrays.glsl"
+ #undef ADV_RUNTIME_PRIMARY_SECONDARY_READONLY
+@@ -63,7 +64,7 @@ void clearAreaLightReservoirOutputs(ivec2 pixel) {
+ 
+ void main() {
+     ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+-    ivec2 resolution = imageSize(secondaryRayStateImage).xy;
++    ivec2 resolution = advUnpackRenderSize(worldUBO.renderSizePacked, imageSize(secondaryRayStateImage).xy);
+     if (any(greaterThanEqual(pixel, resolution))) { return; }
+ 
+     vec4 throughputState = loadSecondaryRayStateLayer(pixel, 2);
+diff --git a/src/shader/world/ray_tracing/internal/advanced/spatial_reuse/spatial_reuse.comp b/src/shader/world/ray_tracing/internal/advanced/spatial_reuse/spatial_reuse.comp
+index ba11e76..1bc554a 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/spatial_reuse/spatial_reuse.comp
++++ b/src/shader/world/ray_tracing/internal/advanced/spatial_reuse/spatial_reuse.comp
+@@ -15,6 +15,7 @@
+ #include "util/ray_cone.glsl"
+ #include "util/sampling_helpers.glsl"
+ #include "common/first_hit_state.glsl"
++#include "common/render_size.glsl"
+ #define ADV_RUNTIME_PRIMARY_SECONDARY_READONLY 1
+ #include "common/runtime_primary_secondary_arrays.glsl"
+ #undef ADV_RUNTIME_PRIMARY_SECONDARY_READONLY
+@@ -225,7 +226,7 @@ DirectLightCameraRay buildDirectLightCameraRay(ivec2 pixel, vec2 resolution) {
+ 
+ void main() {
+     ivec2 q = ivec2(gl_GlobalInvocationID.xy);
+-    ivec2 resolution = imageSize(secondaryRayStateImage).xy;
++    ivec2 resolution = advUnpackRenderSize(worldUBO.renderSizePacked, imageSize(secondaryRayStateImage).xy);
+     if (any(greaterThanEqual(q, resolution))) { return; }
+ 
+     PrimarySurfaceCache primaryCacheQ = loadSecondarySurfaceCache(q);
+diff --git a/src/shader/world/ray_tracing/internal/advanced/temporal_reuse/temporal_reuse.comp b/src/shader/world/ray_tracing/internal/advanced/temporal_reuse/temporal_reuse.comp
+index c2992a7..6123bc7 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/temporal_reuse/temporal_reuse.comp
++++ b/src/shader/world/ray_tracing/internal/advanced/temporal_reuse/temporal_reuse.comp
+@@ -15,6 +15,7 @@
+ #include "util/ray_cone.glsl"
+ #include "util/sampling_helpers.glsl"
+ #include "common/first_hit_state.glsl"
++#include "common/render_size.glsl"
+ #define ADV_RUNTIME_PRIMARY_SECONDARY_READONLY 1
+ #include "common/runtime_primary_secondary_arrays.glsl"
+ #undef ADV_RUNTIME_PRIMARY_SECONDARY_READONLY
+@@ -105,6 +106,7 @@ bool previousFramePixelMatches(ivec2 pixel,
+ 
+ bool tryLoadPreviousFrameReservoir(ivec2 pixel,
+                                    ivec2 resolution,
++                                   ivec2 prevResolution,
+                                    PrimarySurfaceCache cacheQ,
+                                    out AreaLightReservoir reservoir) {
+     reservoir = makeEmptyAreaLightReservoir();
+@@ -113,9 +115,10 @@ bool tryLoadPreviousFrameReservoir(ivec2 pixel,
+     vec3 currentWorldPos = stableTemporalHistoryWorldPos(cacheQ);
+     vec3 currentNormal = stableTemporalHistoryNormal(cacheQ);
+     vec2 motion = imageLoad(motionVectorImage, pixel).xy;
+-    vec2 prevPixelF = vec2(pixel) + motion;
++    // RTX 5090 fork: last frame may have used another render size (dynamic resolution).
++    vec2 prevPixelF = advToPrevRenderPixel(vec2(pixel) + 0.5 + motion, resolution, prevResolution) - 0.5;
+     ivec2 prevPixel = ivec2(round(prevPixelF));
+-    if (!previousFramePixelMatches(prevPixel, resolution, currentWorldPos, currentNormal, length(motion))) {
++    if (!previousFramePixelMatches(prevPixel, prevResolution, currentWorldPos, currentNormal, length(motion))) {
+         return false;
+     }
+ 
+@@ -140,7 +143,8 @@ DirectLightCameraRay buildDirectLightCameraRay(ivec2 pixel, vec2 resolution) {
+ 
+ void main() {
+     ivec2 q = ivec2(gl_GlobalInvocationID.xy);
+-    ivec2 resolution = imageSize(secondaryRayStateImage).xy;
++    ivec2 resolution = advUnpackRenderSize(worldUBO.renderSizePacked, imageSize(secondaryRayStateImage).xy);
++    ivec2 prevResolution = advUnpackRenderSize(worldUBO.prevRenderSizePacked, imageSize(secondaryRayStateImage).xy);
+     if (any(greaterThanEqual(q, resolution))) { return; }
+ 
+     PrimarySurfaceCache cacheQ = loadSecondarySurfaceCache(q);
+@@ -166,7 +170,7 @@ void main() {
+ 
+     AreaLightReservoir cur = loadAreaLightReservoir(q);
+     AreaLightReservoir prev;
+-    bool hasPrev = tryLoadPreviousFrameReservoir(q, resolution, cacheQ, prev);
++    bool hasPrev = tryLoadPreviousFrameReservoir(q, resolution, prevResolution, cacheQ, prev);
+ 
+     float curTarget = evaluateReservoirTargetAtQuery(cur, queryQ, cacheQ);
+     float prevTarget = hasPrev ? evaluateReservoirTargetAtQuery(prev, queryQ, cacheQ) : 0.0;
+diff --git a/src/shader/world/ray_tracing/internal/advanced/volumetric_light/blur.comp b/src/shader/world/ray_tracing/internal/advanced/volumetric_light/blur.comp
+index eaf0095..8b74938 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/volumetric_light/blur.comp
++++ b/src/shader/world/ray_tracing/internal/advanced/volumetric_light/blur.comp
+@@ -13,6 +13,13 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+ #    define ADV_VOL_BLUR_OUTPUT_BINDING 19
+ #endif
+ 
++#include "common/shared.hpp"
++#include "common/render_size.glsl"
++
++layout(set = 2, binding = 0) uniform WorldUniform {
++    WorldUBO worldUBO;
++};
++
+ layout(set = 5, binding = ADV_VOL_BLUR_INPUT_BINDING, rgba16f) uniform readonly image2D inputImage;
+ layout(set = 5, binding = ADV_VOL_BLUR_OUTPUT_BINDING, rgba16f) uniform image2D outputImage;
+ 
+@@ -44,6 +51,11 @@ vec4 loadClamped(ivec2 pixel, ivec2 resolution) {
+ void main() {
+     ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+     ivec2 resolution = imageSize(outputImage);
++    if (worldUBO.renderSizePacked != 0u) {
++        // RTX 5090 fork: dynamic resolution; never blur in pixels outside this frame's render size.
++        resolution = min(resolution, advDownsampledSize(advUnpackRenderSize(worldUBO.renderSizePacked, ivec2(65535)),
++                                                        max(int(ADV_VOLUMETRIC_LIGHT_DOWNSAMPLE_FACTOR), 1)));
++    }
+     if (any(greaterThanEqual(pixel, resolution))) { return; }
+ 
+     vec4 center = imageLoad(inputImage, pixel);
+diff --git a/src/shader/world/ray_tracing/internal/advanced/volumetric_light/temporal.comp b/src/shader/world/ray_tracing/internal/advanced/volumetric_light/temporal.comp
+index 3105569..70275c1 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/volumetric_light/temporal.comp
++++ b/src/shader/world/ray_tracing/internal/advanced/volumetric_light/temporal.comp
+@@ -4,6 +4,7 @@
+ #include "common/shared.hpp"
+ #include "common/runtime_texture_arrays.glsl"
+ #include "util/random.glsl"
++#include "common/render_size.glsl"
+ 
+ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+ 
+@@ -56,7 +57,12 @@ void neighborhoodBounds(ivec2 pixel, ivec2 resolution, float centerDepth, out ve
+ 
+ void main() {
+     ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+-    ivec2 resolution = imageSize(volumetricLightTemporalImage);
++    // RTX 5090 fork: dynamic resolution (this frame's and last frame's render sizes).
++    ivec2 fullResolution = advUnpackRenderSize(worldUBO.renderSizePacked, imageSize(motionVectorImage));
++    ivec2 prevFullResolution = advUnpackRenderSize(worldUBO.prevRenderSizePacked, imageSize(motionVectorImage));
++    int downsampleFactor = max(int(ADV_VOLUMETRIC_LIGHT_DOWNSAMPLE_FACTOR), 1);
++    ivec2 resolution = min(advDownsampledSize(fullResolution, downsampleFactor), imageSize(volumetricLightTemporalImage));
++    ivec2 prevResolution = min(advDownsampledSize(prevFullResolution, downsampleFactor), imageSize(volumetricLightTemporalImage));
+     if (any(greaterThanEqual(pixel, resolution))) { return; }
+ 
+     vec4 current = imageLoad(volumetricLightRawImage, pixel);
+@@ -71,20 +77,18 @@ void main() {
+     vec3 currentRadiance = finiteVec3(current.rgb) ? max(current.rgb, vec3(0.0)) : vec3(0.0);
+     vec3 accumulatedRadiance = currentRadiance;
+ 
+-    ivec2 fullResolution = imageSize(motionVectorImage);
+-    int downsampleFactor = max(int(ADV_VOLUMETRIC_LIGHT_DOWNSAMPLE_FACTOR), 1);
+     ivec2 baseFullPixel = pixel * downsampleFactor;
+     uint offsetSeed = xxhash32(uvec3(uint(pixel.x), uint(pixel.y), worldUBO.seed ^ 0x6A09E667u));
+     uint downsampleFactorU = uint(max(downsampleFactor, 1));
+     ivec2 selectedOffset = ivec2(int(offsetSeed % downsampleFactorU), int((offsetSeed / downsampleFactorU) % downsampleFactorU));
+     ivec2 fullPixel = clamp(baseFullPixel + selectedOffset, ivec2(0), fullResolution - ivec2(1));
+     vec2 motion = imageLoad(motionVectorImage, fullPixel).xy;
+-    vec2 prevFullPixel = vec2(fullPixel) + vec2(0.5) + motion;
++    vec2 prevFullPixel = advToPrevRenderPixel(vec2(fullPixel) + vec2(0.5) + motion, fullResolution, prevFullResolution);
+     vec2 prevLowPixelF = prevFullPixel / float(downsampleFactor) - vec2(0.5);
+     ivec2 prevLowPixel = ivec2(round(prevLowPixelF));
+ 
+     if (ADV_VOLUMETRIC_LIGHT_HISTORY_READY && all(greaterThanEqual(prevLowPixel, ivec2(0))) &&
+-        all(lessThan(prevLowPixel, resolution))) {
++        all(lessThan(prevLowPixel, prevResolution))) {
+         vec4 history =
+             imageLoad(volumetricLightHistoryImage, rtArrayCoord(prevLowPixel, ADV_VOLUMETRIC_LIGHT_HISTORY_PING_INPUT ? 0 : 1));
+         float historyDepth = history.a;
+diff --git a/src/shader/world/ray_tracing/internal/advanced/volumetric_light/volumetric_light.rgen b/src/shader/world/ray_tracing/internal/advanced/volumetric_light/volumetric_light.rgen
+index 9a7999e..57fe8ce 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/volumetric_light/volumetric_light.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/volumetric_light/volumetric_light.rgen
+@@ -6,6 +6,7 @@
+ #include "common/shared.hpp"
+ #include "common/constants.glsl"
+ #include "common/first_hit_state.glsl"
++#include "common/render_size.glsl"
+ #define ADV_RUNTIME_PRIMARY_SECONDARY_READONLY 1
+ #include "common/runtime_primary_secondary_arrays.glsl"
+ #undef ADV_RUNTIME_PRIMARY_SECONDARY_READONLY
+@@ -231,7 +232,7 @@ bool loadVolumetricCandidate(ivec2 pixel, out float linearDepth, out uint firstH
+ 
+ void main() {
+     ivec2 lowPixel = ivec2(gl_LaunchIDEXT.xy);
+-    ivec2 lowResolution = imageSize(volumetricLightRawImage);
++    ivec2 lowResolution = ivec2(gl_LaunchSizeEXT.xy); // RTX 5090 fork: dynamic resolution
+     if (any(greaterThanEqual(lowPixel, lowResolution))) { return; }
+ 
+     if (worldUBO.skyType != 1 || skyUBO.cameraSubmersionType == 0 || skyUBO.cameraSubmersionType == 2 ||
+@@ -240,7 +241,7 @@ void main() {
+         return;
+     }
+ 
+-    ivec2 fullResolution = imageSize(linearDepthImage);
++    ivec2 fullResolution = advUnpackRenderSize(worldUBO.renderSizePacked, imageSize(linearDepthImage));
+     int downsampleFactor = volumetricDownsampleFactor();
+     uint seed = xxhash32(uvec3(uint(lowPixel.x), uint(lowPixel.y), worldUBO.seed ^ 0xBB67AE85u));
+     ivec2 selectedOffset = selectFullResolutionOffset(lowPixel, downsampleFactor);
+diff --git a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+index 475daf7..4d0bd6c 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+@@ -67,6 +67,7 @@
+ #include "util/ray.glsl"
+ #include "util/util.glsl"
+ #include "common/first_hit_state.glsl"
++#include "common/render_size.glsl"
+ #define ADV_RUNTIME_PRIMARY_SECONDARY_READONLY 1
+ #include "common/runtime_primary_secondary_arrays.glsl"
+ #undef ADV_RUNTIME_PRIMARY_SECONDARY_READONLY
+@@ -309,8 +310,10 @@ vec3 sampleNearestCompatibleVolumetricLight(vec2 srcPos, ivec2 maxPixel, float f
+ }
+ 
+ vec3 sampleVolumetricLight(ivec2 pixel) {
+-    ivec2 srcResolution = imageSize(volumetricLightImage);
+-    ivec2 dstResolution = imageSize(outputImage);
++    // RTX 5090 fork: dynamic resolution.
++    ivec2 dstResolution = advUnpackRenderSize(worldUBO.renderSizePacked, imageSize(outputImage));
++    ivec2 srcResolution = min(advDownsampledSize(dstResolution, max(int(ADV_VOLUMETRIC_LIGHT_DOWNSAMPLE_FACTOR), 1)),
++                              imageSize(volumetricLightImage));
+     if (srcResolution.x <= 0 || srcResolution.y <= 0 || dstResolution.x <= 0 || dstResolution.y <= 0) {
+         return vec3(0.0);
+     }
+@@ -988,7 +991,7 @@ void main() {
+     ivec2 pixel = ivec2(gl_LaunchIDEXT.xy);
+     vec2 resolution = vec2(gl_LaunchSizeEXT.xy);
+ #if SHARC_UPDATE && USE_SHARC
+-    vec2 fullResolution = vec2(imageSize(outputImage));
++    vec2 fullResolution = vec2(advUnpackRenderSize(worldUBO.renderSizePacked, imageSize(outputImage)));
+     ivec2 block = ivec2(gl_LaunchIDEXT.xy);
+     uint downsampleFactor = max(sharcConfig.updateDownsampleFactor, 1u);
+     uint blockHash = xxhash32(uvec3(uint(block.x), uint(block.y), sharcConfig.frameIndex ^ worldUBO.seed));
