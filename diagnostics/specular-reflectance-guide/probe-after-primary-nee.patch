@@ -1,0 +1,54 @@
+--- /dev/null
++++ b/src/shader/world/ray_tracing/internal/advanced/common/specular_reflectance_guide.glsl
+@@ -0,0 +1,26 @@
++#ifndef ADV_SPECULAR_REFLECTANCE_GUIDE_GLSL
++#define ADV_SPECULAR_REFLECTANCE_GUIDE_GLSL
++
++// Directional hemispherical GGX approximation recommended by NVIDIA's
++// Streamline ProgrammingGuideDLSS_RR.md, section 4.2.1 (Ray Tracing Gems ch.32).
++// Expanded scalar polynomials avoid HLSL/GLSL matrix-storage ambiguity.
++// The existing Disney BSDF uses alpha = roughness * roughness.
++vec3 specularReflectanceGuide(vec3 f0, float roughness, float nDotV) {
++    float v = clamp(abs(nDotV), 0.0, 1.0);
++    float a = roughness * roughness;
++    float a2 = a * a;
++    float a3 = a2 * a;
++    float v2 = v * v;
++    float v3 = v2 * v;
++    float bias = ((0.99044 - 1.28514 * v) + (1.29678 - 0.755907 * v) * a) /
++                 ((1.0 + 2.92338 * v + 59.4188 * v3) +
++                  (20.3225 - 27.0302 * v + 222.592 * v3) * a +
++                  (121.563 + 626.13 * v + 316.627 * v3) * a3);
++    float scale = ((0.0365463 + 3.32707 * v) + (9.0632 - 9.04756 * v) * a) /
++                  ((1.0 + 3.59685 * v2 - 1.36772 * v3) +
++                   (9.04401 - 16.3174 * v2 + 9.22949 * v3) * a +
++                   (5.56589 + 19.7886 * v2 - 20.2123 * v3) * a3);
++    bias *= clamp(f0.g * 50.0, 0.0, 1.0);
++    return clamp(f0 * max(scale, 0.0) + vec3(max(bias, 0.0)), vec3(0.0), vec3(1.0));
++}
++#endif
+--- a/src/shader/world/ray_tracing/internal/advanced/primary/primary.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/primary/primary.rgen
+@@ -10,6 +10,7 @@
+ #include "util/util.glsl"
+ #include "common/first_hit_state.glsl"
+ #include "common/runtime_primary_secondary_arrays.glsl"
++#include "common/specular_reflectance_guide.glsl"
+ 
+ #ifndef ADV_CAPTURE_VOLUMETRIC_CLOUD_INDIRECT
+ #    define ADV_CAPTURE_VOLUMETRIC_CLOUD_INDIRECT 1
+@@ -386,7 +387,13 @@
+ 
+         imageStore(diffuseAlbedoImage, pixel,
+                    vec4(firstHitMat.albedoValue.rgb * firstHitMat.albedoValue.a, firstHitMat.metallic));
+-        imageStore(specularAlbedoImage, pixel, vec4(firstHitMat.f0, 0.0));
++        vec3 specularGuide = firstHitMat.f0;
++        if (primaryStartBounce == 1 && !isHand && firstHitMat.transmission <= EPS &&
++            firstHitMat.roughness >= 0.5 && firstHitMat.metallic < 0.5 && firstHitMat.emission <= EPS) {
++            specularGuide = specularReflectanceGuide(firstHitMat.f0, firstHitMat.roughness,
++                dot(-selectedFirstHit.incomingDirection, mainRay.normal));
++        }
++        imageStore(specularAlbedoImage, pixel, vec4(specularGuide, 0.0));
+         imageStore(normalRoughnessImage, pixel, vec4(mainRay.normal, firstHitMat.roughness));
+         imageStore(linearDepthImage, pixel, vec4(selectedFirstHit.viewDepth));
+ 
