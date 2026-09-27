@@ -1,0 +1,13 @@
+diff --git c/src/shader/world/ray_tracing/internal/advanced/common/continuation_light_guide.glsl i/src/shader/world/ray_tracing/internal/advanced/common/continuation_light_guide.glsl
+index 0a43242003d274c391add2b83c7a5a81c715c892..08296fca5230d893fb6581ababb4c2d16430eeaf 100644
+--- c/src/shader/world/ray_tracing/internal/advanced/common/continuation_light_guide.glsl
++++ i/src/shader/world/ray_tracing/internal/advanced/common/continuation_light_guide.glsl
+@@ -5,7 +5,7 @@
+ #include "common/continuation_guide_sampling.glsl"
+ 
+ // Diagnostic variants: 1 = SHaRC update paths; 2 = all rough opaque paths.
+-#define ADV_CONTINUATION_LIGHT_GUIDE_SCOPE 1
++#define ADV_CONTINUATION_LIGHT_GUIDE_SCOPE 2
+ 
+ ContinuationGuide chooseContinuationGuide(vec3 relativePosition, vec3 normal, WorldUBO world, inout uint seed) {
+     ContinuationGuide guide = emptyContinuationGuide();

@@ -1,0 +1,77 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#include "common/continuation_guide_sampling.glsl"
+
+layout(local_size_x = 64) in;
+layout(std430, set = 0, binding = 0) buffer Results { vec4 result[]; };
+
+// Three independent estimators of the same integral: production Disney,
+// guided Disney, and deterministic uniform-hemisphere quadrature. The last
+// does not use either sampling density to construct its reference integral.
+void main() {
+    uint lane = gl_GlobalInvocationID.x;
+    uint row = gl_GlobalInvocationID.y;
+    uint test = row / 3u;
+    uint mode = row % 3u;
+    uint seed = xxhash32(uvec3(lane, test, 0x5090CAFEu));
+    LabPBRMat mat;
+    mat.albedo = vec3(0.6, 0.4, 0.2);
+    mat.f0 = vec3(0.04);
+    mat.roughness = test == 5u ? 0.35 : 0.8;
+    mat.metallic = test == 7u ? 1.0 : 0.0;
+    mat.transmission = 0.0;
+    mat.subSurface = 0.0;
+    mat.ior = 1.5;
+    mat.emission = 0.0;
+    mat.normal = vec3(0, 0, 1);
+    mat.ao = 1.0;
+    mat.height = 0.0;
+    vec3 normal = test == 11u ? normalize(vec3(0.7, 0.2, 1.0)) : vec3(0, 0, 1);
+    vec3 view = test == 5u ? normalize(vec3(0.9, 0, 0.2)) : normal;
+    vec3 hotA = normalize(vec3(0.25, 0.0, 1.0));
+    vec3 hotB = normalize(vec3(-0.7, 0.3, 1.0));
+    vec4 sums = vec4(0.0);
+    for (uint i = 0u; i < 512u; ++i) {
+        ContinuationGuide guide = emptyContinuationGuide();
+        guide.axis = hotA;
+        guide.cosMin = 0.95;
+        guide.probability = test == 0u ? 0.0 : 0.5;
+        if (test == 2u) { guide.axis = rand(seed) < 0.5 ? hotA : hotB; }
+        if (test == 3u) { guide.axis = normalize(vec3(0.7, -0.6, 0.5)); }
+        if (test == 6u) { guide.axis = -normal; }
+        if (test == 8u) { guide.cosMin = 0.9995; }
+        if (test == 9u) { guide.cosMin = 0.0; }
+        if (test == 10u) { guide.axis = normalize(vec3(1.0, 0.0, 0.0001)); guide.cosMin = 0.0; }
+        vec3 direction, bsdf;
+        float pdf;
+        uint lobe;
+        if (mode == 2u) {
+            uint index = lane * 512u + i;
+            float z = (float(index / 1024u) + 0.5) / 1024.0;
+            float phi = TWO_PI * (float(index % 1024u) + 0.5) / 1024.0;
+            float r = sqrt(max(0.0, 1.0 - z * z));
+            vec3 tangent, bitangent;
+            Onb(normal, tangent, bitangent);
+            direction = ToWorld(tangent, bitangent, normal, vec3(r * cos(phi), r * sin(phi), z));
+            bsdf = DisneyEval(mat, view, normal, direction, pdf);
+            pdf = 1.0 / TWO_PI;
+        } else if (mode == 1u) {
+            bsdf = sampleGuidedContinuation(mat, view, normal, guide, direction, pdf, seed, lobe);
+        } else {
+            bsdf = DisneySample(mat, view, normal, direction, pdf, seed, lobe);
+        }
+        float incident = 0.1;
+        bool first = dot(direction, hotA) > 0.99;
+        if (test == 8u) { first = false; } // Narrow cap: smooth integrand avoids quadrature edge error.
+        if (test == 4u && direction.y > 0.0) { first = false; } // Occlude half of A.
+        if (first) { incident += 10.0; }
+        if (test == 2u && dot(direction, hotB) > 0.99) { incident += 5.0; }
+        bool bad = isnan(pdf) || isinf(pdf) || pdf < 0.0 ||
+                   any(isnan(bsdf)) || any(isinf(bsdf)) ||
+                   any(isnan(direction)) || any(isinf(direction));
+        float value = pdf > 1e-8 && !bad ? Luminance(bsdf) * incident / pdf : 0.0;
+        sums += vec4(value, value * value, bad ? 1.0 : 0.0, 1.0);
+    }
+    result[row * 2048u + lane] = sums;
+}

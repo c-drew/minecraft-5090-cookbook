@@ -23,6 +23,8 @@ reproduced GPU failure path; it does not establish a cure for the remaining spot
 The later [runtime cache-update correction](docs/sharc-update-runtime.md) makes
 an earlier inactive emission rule work in shared hit shaders. It provides a
 further modest convergence gain and changes brightness in the glowstone test room.
+Subsequent [bounce-guiding and cache-retention experiments](diagnostics/continuation-light-guide/README.md)
+did not establish a useful further improvement and remain outside the selected build.
 
 ## Results
 

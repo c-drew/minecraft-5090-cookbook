@@ -1,0 +1,14 @@
+diff --git c/src/shader/world/ray_tracing/internal/advanced/sharc_resolve.comp i/src/shader/world/ray_tracing/internal/advanced/sharc_resolve.comp
+index d4d8aa87fbcc10fdd89631b8ae5c20f30b57a370..1077126b85867ee600a985298e7d70ce201fe064 100644
+--- c/src/shader/world/ray_tracing/internal/advanced/sharc_resolve.comp
++++ i/src/shader/world/ray_tracing/internal/advanced/sharc_resolve.comp
+@@ -83,7 +83,8 @@ void main() {
+     SharcResolveParameters resolveParameters;
+     resolveParameters.cameraPositionPrev = sharcConfig.cameraPositionPrev.xyz;
+     resolveParameters.accumulationFrameNum = sharcConfig.accumulationFrameNum;
+-    resolveParameters.staleFrameNumMax = sharcConfig.staleFrameNumMax;
++    // Retain off-screen lighting for the rapid-return diagnostic.
++    resolveParameters.staleFrameNumMax = 1024u;
+     resolveParameters.frameIndex = sharcConfig.frameIndex;
+ 
+     SharcResolveEntry(entryIndex, makeSharcParameters(), resolveParameters);
