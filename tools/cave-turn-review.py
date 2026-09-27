@@ -52,7 +52,22 @@ for i, event in enumerate(events):
     candidates = np.flatnonzero(motion[start:stop] > args.motion_threshold) + start
     if not len(candidates):
         raise RuntimeError(f'No rapid turn detected for event {i}')
-    end = int(candidates[-1])
+    # A nearby animated torch can exceed the threshold long after the turn.
+    # Follow the strongest camera-motion burst, allowing at most two quiet
+    # frames within it, instead of accepting every later isolated change.
+    peak = int(start + np.argmax(motion[start:stop]))
+    end = peak
+    quiet = 0
+    for n in range(peak + 1, stop):
+        if motion[n] > args.motion_threshold:
+            end = n
+            quiet = 0
+        else:
+            quiet += 1
+            if quiet > 2:
+                break
+    if end / 60 > event['end'] + 0.25:
+        raise RuntimeError(f'Unstable image prevents reliable turn-end alignment for event {i}')
     down = event['yaw'] > 0
     box = (10, 15, 250, 200) if down else (400, 15, 635, 195)
     x0, y0, x1, y1 = box
@@ -90,6 +105,7 @@ for i, event in enumerate(events):
                  'motion_end_video_s': end / 60, 'crop_at_640x360': box,
                  'settled_mean_8bit': float(target_mean), 'mask_pixels': int(mask.sum()), 'samples': samples})
 result = {'note': __doc__, 'motion_threshold': args.motion_threshold,
+          'motion_end_method': 'strongest motion burst; at most two quiet frames; late-end guard',
           'mask_reference': str(args.mask_reference) if args.mask_reference else None, 'events': rows}
 (p / 'convergence.json').write_text(json.dumps(result, indent=2) + '\n')
 sheet.save(p / 'convergence.png')

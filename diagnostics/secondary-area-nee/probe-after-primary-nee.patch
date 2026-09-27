@@ -1,0 +1,227 @@
+diff --git c/src/shader/util/ray.glsl w/src/shader/util/ray.glsl
+index ad06e80..22ecec2 100644
+--- c/src/shader/util/ray.glsl
++++ w/src/shader/util/ray.glsl
+@@ -27,6 +27,16 @@ const uint rayIndirectVolumetricCloudBit = 1u << 19u;
+ // Shared hit shaders need the update/query distinction in the ray payload.
+ const uint raySharcUpdateBit = 1u << 20u;
+ const uint rayPrimaryAreaNeeBit = 1u << 21u;
++const uint raySecondaryAreaNeeBit = 1u << 23u;
++const uint rayNeeCoveredHitBit = 1u << 24u;
++void raySetSecondaryAreaNee(inout MainRay ray, bool enabled) {
++    ray.stateBits = enabled ? (ray.stateBits | raySecondaryAreaNeeBit) : (ray.stateBits & ~raySecondaryAreaNeeBit);
++}
++bool rayHasSecondaryAreaNee(MainRay ray) { return (ray.stateBits & raySecondaryAreaNeeBit) != 0u; }
++void raySetNeeCoveredHit(inout MainRay ray, bool enabled) {
++    ray.stateBits = enabled ? (ray.stateBits | rayNeeCoveredHitBit) : (ray.stateBits & ~rayNeeCoveredHitBit);
++}
++bool rayHasNeeCoveredHit(MainRay ray) { return (ray.stateBits & rayNeeCoveredHitBit) != 0u; }
+ 
+ void raySetPrimaryAreaNee(inout MainRay ray, bool enabled) {
+     ray.stateBits = enabled ? (ray.stateBits | rayPrimaryAreaNeeBit) : (ray.stateBits & ~rayPrimaryAreaNeeBit);
+diff --git c/src/shader/world/ray_tracing/internal/advanced/common/secondary_area_nee.glsl w/src/shader/world/ray_tracing/internal/advanced/common/secondary_area_nee.glsl
+new file mode 100644
+index 0000000..34ca885
+--- /dev/null
++++ w/src/shader/world/ray_tracing/internal/advanced/common/secondary_area_nee.glsl
+@@ -0,0 +1,85 @@
++#ifndef ADV_SECONDARY_AREA_NEE_GLSL
++#define ADV_SECONDARY_AREA_NEE_GLSL
++
++// Camera continuation only. Cache-update paths retain their existing estimator.
++// Four independent proposals and one visibility ray estimate direct emission
++// at the first rough secondary wall. Zero candidates still count as attempts.
++vec3 sampleSecondaryAreaNee(SampledSurface surface, vec3 viewDir, uint seed, out bool supported) {
++    supported = false;
++    vec3 origin = surface.worldPos + vec3(worldUBO.cameraPos.xyz);
++    int center;
++    ivec3 centerOrigin;
++    if (!tryGetChunkIndexFromSectionCoordinate(ivec3(floor(origin / 16.0)), worldUBO, center, centerOrigin) ||
++        !chunkPackedDataMatchesOrigin(chunkPackedData[center], centerOrigin)) { return vec3(0.0); }
++    uint count = chunkLightNeighborhoods[center].header.x;
++    if (count == 0u || count > uint(ADV_CHUNK_NEIGHBORHOOD_CAPACITY)) { return vec3(0.0); }
++    supported = true;
++    vec3 chosenPoint = vec3(0.0);
++    vec3 chosenContribution = vec3(0.0);
++    float chosenTarget = 0.0;
++    float weightSum = 0.0;
++    const int attempts = 4;
++    for (int sampleIndex = 0; sampleIndex < attempts; ++sampleIndex) {
++        uint slot = min(uint(rand(seed) * float(count)), count - 1u);
++        ChunkLightNeighborhoodEntry first = chunkLightNeighborhoods[center].entries[slot];
++        if (rand(seed) >= first.aliasProbability) { slot = first.aliasIndex; }
++        if (slot >= count) { continue; }
++        ChunkLightNeighborhoodEntry entry = chunkLightNeighborhoods[center].entries[slot];
++        if (!(entry.probability > 1e-8) || entry.chunkIndex >= uint(chunkPackedData.length())) { continue; }
++        ChunkLightData chunk = chunkPackedData[entry.chunkIndex];
++        if (!chunkPackedDataHasLights(chunk)) { continue; }
++        int checkedIndex;
++        ivec3 checkedOrigin;
++        if (!tryGetChunkIndexFromSectionCoordinate(ivec3(chunk.x, chunk.y, chunk.z) / 16, worldUBO,
++                                                   checkedIndex, checkedOrigin) ||
++            checkedIndex != int(entry.chunkIndex) || !chunkPackedDataMatchesOrigin(chunk, checkedOrigin)) { continue; }
++        ChunkPackedLightBuffer lights = ChunkPackedLightBuffer(chunk.lightBufferAddress);
++        uint lightIndex = min(uint(rand(seed) * float(chunk.lightCount)), chunk.lightCount - 1u);
++        ChunkPackedLight light = lights.lights[lightIndex];
++        if (!(light.p0Area.w > 1e-8) ||
++            !(max(light.radiance.r, max(light.radiance.g, light.radiance.b)) > 1e-8)) { continue; }
++        vec3 a = light.p0Area.xyz;
++        vec3 b = light.p1.xyz;
++        vec3 c = light.p2.xyz;
++        float area0 = length(cross(b - a, c - a));
++        float area1 = length(cross(c - a, light.p3.xyz - a));
++        if (!(area0 + area1 > 1e-12)) { continue; }
++        if (rand(seed) * (area0 + area1) >= area0) { b = c; c = light.p3.xyz; }
++        float r = sqrt(rand(seed));
++        float t = rand(seed);
++        vec3 point = (1.0 - r) * a + r * (1.0 - t) * b + r * t * c - vec3(worldUBO.cameraPos.xyz);
++        vec3 delta = point - surface.worldPos;
++        float d2 = dot(delta, delta);
++        if (!(d2 > 1e-8)) { continue; }
++        vec3 direction = delta * inversesqrt(d2);
++        float facing = dot(light.normal.xyz, -direction);
++        if (!(facing > 1e-6) || dot(direction, surface.geometricNormal) <= 0.0) { continue; }
++        float bsdfPdf;
++        vec3 brdf = DisneyEval(surface.mat, viewDir, surface.shadingNormal, direction, bsdfPdf);
++        if (!(bsdfPdf > 1e-6) || !isFiniteVec3(brdf)) { continue; }
++        float inversePdf = light.p0Area.w * float(chunk.lightCount) / entry.probability;
++        vec3 contribution = ADV_INDIRECT_LIGHT_STRENGTH * light.radiance.rgb * brdf * (facing / d2) * inversePdf;
++        float target = dot(max(contribution, vec3(0.0)), vec3(0.2126, 0.7152, 0.0722));
++        if (!(target > 0.0) || !isFiniteFloat(target) || !isFiniteVec3(contribution)) { continue; }
++        weightSum += target;
++        if (rand(seed) * weightSum < target) {
++            chosenPoint = point;
++            chosenContribution = contribution;
++            chosenTarget = target;
++        }
++    }
++    if (!(chosenTarget > 0.0)) { return vec3(0.0); }
++    vec3 shadowOrigin = surface.worldPos + surface.geometricNormal * 0.0002;
++    vec3 delta = chosenPoint - shadowOrigin;
++    float distanceToLight = length(delta);
++    if (!(distanceToLight > 0.0021)) { return vec3(0.0); }
++    shadowRay.radiance = vec3(0.0);
++    shadowRay.throughput = vec3(1.0);
++    shadowRay.insideBoat = rayInsideBoat(mainRay) ? 1u : 0u;
++    shadowRay.pad0 = 1u;
++    traceRayEXT(topLevelAS, gl_RayFlagsNoneEXT,
++                WORLD_MASK | PLAYER_MASK | FISHING_BOBBER_MASK | WEATHER_MASK | PARTICLE_MASK | CLOUD_MASK,
++                0, 0, 0, shadowOrigin, 0.0001, delta / distanceToLight, distanceToLight - 0.002, 1);
++    return chosenContribution * (weightSum / (float(attempts) * chosenTarget)) * shadowRay.radiance;
++}
++#endif
+diff --git c/src/shader/world/ray_tracing/internal/advanced/world/default.rchit w/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
+index e086344..f95d6ce 100644
+--- c/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
++++ w/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
+@@ -459,7 +459,11 @@ bool loadPreviousScenePos(uint geometryBufferIndex, uint primitiveID, vec3 baryC
+     return true;
+ }
+ 
++#include "common/secondary_area_nee.glsl"
++
+ void main() {
++    bool incomingSecondaryNee = rayHasSecondaryAreaNee(mainRay);
++    raySetSecondaryAreaNee(mainRay, false);
+     float lodTiles = 1.0; // RTX 5090 fork: LoD per-block tiling (util/vertex.glsl)
+     uint instanceID = gl_InstanceCustomIndexEXT;
+     uint geometryID = gl_GeometryIndexEXT;
+@@ -620,6 +624,14 @@ void main() {
+             primaryNeeCoversEmitter(gl_WorldRayOriginEXT, currentSurface.worldPos, gl_WorldRayDirectionEXT)) {
+             emissionFactor = 0.0;
+         }
++        if (incomingSecondaryNee && !rayIsSharcUpdate(mainRay) && bounce == 2u &&
++            currentSurface.mat.emission > EPS &&
++            primaryNeeCoversEmitter(gl_WorldRayOriginEXT, currentSurface.worldPos, gl_WorldRayDirectionEXT)) {
++            emissionFactor = 0.0;
++            // Preserve reflected transport by continuing the path. Do not
++            // replace this partitioned hit with a cache value containing E.
++            raySetNeeCoveredHit(mainRay, true);
++        }
+         vec3 emissionRadiance = emissionFactor * currentSurface.tint * currentSurface.mat.emission * mainRay.throughput;
+         emissionRadiance += currentSurface.tint * albedoEmission * mainRay.throughput;
+         mainRay.radiance += emissionRadiance;
+@@ -629,6 +641,15 @@ void main() {
+                                           atlasUvMax, dPduWorld, dPdvWorld, baseGeoNormal,
+                                           traceLocalHeight, textureMap.normal, maxDepthWorld,
+                                           hasFftWaterSurface, incomingWaterEntry);
++        if (!rayIsSharcUpdate(mainRay) && bounce == 1u && rayHasPrimaryAreaNee(mainRay) &&
++            currentSurface.mat.emission <= EPS && currentSurface.mat.transmission <= EPS &&
++            currentSurface.mat.roughness >= 0.5 && currentSurface.mat.metallic < 0.5) {
++            bool supported;
++            vec3 areaLight = sampleSecondaryAreaNee(currentSurface, currentViewDir,
++                xxhash32(uvec3(mainRay.seed, gl_LaunchIDEXT.x, gl_LaunchIDEXT.y ^ 0x5FD038C1u)), supported);
++            directLight += areaLight * mainRay.throughput;
++            raySetSecondaryAreaNee(mainRay, supported);
++        }
+         if (localBounce == 0) { mainRay.directLightRadiance = directLight; }
+         mainRay.radiance += directLight;
+ 
+diff --git c/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit w/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
+index e086344..f95d6ce 100644
+--- c/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
++++ w/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
+@@ -459,7 +459,11 @@ bool loadPreviousScenePos(uint geometryBufferIndex, uint primitiveID, vec3 baryC
+     return true;
+ }
+ 
++#include "common/secondary_area_nee.glsl"
++
+ void main() {
++    bool incomingSecondaryNee = rayHasSecondaryAreaNee(mainRay);
++    raySetSecondaryAreaNee(mainRay, false);
+     float lodTiles = 1.0; // RTX 5090 fork: LoD per-block tiling (util/vertex.glsl)
+     uint instanceID = gl_InstanceCustomIndexEXT;
+     uint geometryID = gl_GeometryIndexEXT;
+@@ -620,6 +624,14 @@ void main() {
+             primaryNeeCoversEmitter(gl_WorldRayOriginEXT, currentSurface.worldPos, gl_WorldRayDirectionEXT)) {
+             emissionFactor = 0.0;
+         }
++        if (incomingSecondaryNee && !rayIsSharcUpdate(mainRay) && bounce == 2u &&
++            currentSurface.mat.emission > EPS &&
++            primaryNeeCoversEmitter(gl_WorldRayOriginEXT, currentSurface.worldPos, gl_WorldRayDirectionEXT)) {
++            emissionFactor = 0.0;
++            // Preserve reflected transport by continuing the path. Do not
++            // replace this partitioned hit with a cache value containing E.
++            raySetNeeCoveredHit(mainRay, true);
++        }
+         vec3 emissionRadiance = emissionFactor * currentSurface.tint * currentSurface.mat.emission * mainRay.throughput;
+         emissionRadiance += currentSurface.tint * albedoEmission * mainRay.throughput;
+         mainRay.radiance += emissionRadiance;
+@@ -629,6 +641,15 @@ void main() {
+                                           atlasUvMax, dPduWorld, dPdvWorld, baseGeoNormal,
+                                           traceLocalHeight, textureMap.normal, maxDepthWorld,
+                                           hasFftWaterSurface, incomingWaterEntry);
++        if (!rayIsSharcUpdate(mainRay) && bounce == 1u && rayHasPrimaryAreaNee(mainRay) &&
++            currentSurface.mat.emission <= EPS && currentSurface.mat.transmission <= EPS &&
++            currentSurface.mat.roughness >= 0.5 && currentSurface.mat.metallic < 0.5) {
++            bool supported;
++            vec3 areaLight = sampleSecondaryAreaNee(currentSurface, currentViewDir,
++                xxhash32(uvec3(mainRay.seed, gl_LaunchIDEXT.x, gl_LaunchIDEXT.y ^ 0x5FD038C1u)), supported);
++            directLight += areaLight * mainRay.throughput;
++            raySetSecondaryAreaNee(mainRay, supported);
++        }
+         if (localBounce == 0) { mainRay.directLightRadiance = directLight; }
+         mainRay.radiance += directLight;
+ 
+diff --git c/src/shader/world/ray_tracing/internal/advanced/world/world.rgen w/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+index a447e56..a5fc929 100644
+--- c/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
++++ w/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+@@ -433,6 +433,7 @@ void initMainRay(vec3 origin, vec3 direction, uint seed, float coneSpread, out M
+ }
+ 
+ void resetMainRay(inout MainRay ray, int bounce) {
++    raySetNeeCoveredHit(ray, false);
+     raySetBounce(ray, uint(bounce));
+     ray.hitT = 0.0;
+     raySetStop(ray, false);
+@@ -814,7 +815,7 @@ void traceSecondary(inout MainRay rayState,
+             vec3 hitWorldPos = tracedOrigin + tracedDirection * rayState.hitT;
+ #if SHARC_QUERY && USE_SHARC
+             vec3 positionWorld = hitWorldPos + vec3(worldUBO.cameraPos.xyz);
+-            if (sharcAllowQuery(isPrimaryCameraPath, rayState.hitT, hitMat.roughness, rayLobeType(rayState), sharcParameters,
++            if (!rayHasNeeCoveredHit(rayState) && sharcAllowQuery(isPrimaryCameraPath, rayState.hitT, hitMat.roughness, rayLobeType(rayState), sharcParameters,
+                                 positionWorld)) {
+                 SharcHitData sharcHitData;
+                 sharcHitData.positionWorld = positionWorld;

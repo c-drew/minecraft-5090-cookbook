@@ -17,6 +17,7 @@ into the cookbook. Numbers are fps average or 1% low as noted.
 | A second graphics queue for BLAS builds | No gain |
 | Spatially filter indirect lighting before DLSS RR | 3×3 and 5×5 prototypes add persistent cave speckles. Removing albedo normalization or using displaced parallax geometry does not cure the regression. [Reproduction and limits](../diagnostics/indirect-prefilter/README.md) |
 | Earlier secondary cache access after rough primary scattering, on the corrected emission base | Saves about 0.082 ms in final composition in one cave test; no convincing convergence gain, general material/outdoor quality unvalidated. [Isolated probe](../diagnostics/first-secondary-cache/README.md) |
+| Explicit area-light sampling at the first rough secondary wall | Small early settling gain does not repeat in lossless capture; adds about 0.20–0.23 ms to final composition. [Probe and measurement audit](../diagnostics/secondary-area-nee/README.md) |
 
 ## CPU and scheduling
 
