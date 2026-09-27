@@ -31,7 +31,9 @@ An isolated [earlier secondary cache lookup](diagnostics/first-secondary-cache/R
 saved a small amount of pass time without clearly improving cave convergence.
 [Raw GPU captures](diagnostics/raw-light/README.md) now verify the failed filter's
 arithmetic and trace most extreme continuation samples to first-secondary
-emitter hits, motivating an audit of overlapping direct-light estimators.
+emitter hits. The selected [primary emitter accounting correction](docs/primary-nee-emission.md)
+removes overlapping contributions within the area sampler's support. Two
+comparisons reduce early cave settling error by 17–18%, with residual noise.
 
 ## Results
 

@@ -113,8 +113,9 @@ The relevant shader settings are `initial_samples=48`,
 `player_block_light_shadows=render_pipeline.false`.
 The sample count is light candidates per pixel, not full path samples.
 
-The current optional stack includes the count correction, sampling optimizations
-and cache-energy correction below. To reproduce the earlier count-only comparison, apply only
+The current optional stack includes the count correction, sampling optimizations,
+cache-energy correction, [runtime update flag](sharc-update-runtime.md), and
+[primary emitter accounting](primary-nee-emission.md). To reproduce the earlier count-only comparison, apply only
 experimental patch 0001 and use 64 candidates with history cap 24.
 
 Download Linux SR and RR libraries from the official
@@ -338,6 +339,11 @@ not an active emission correction. A later
 documents the resulting brightness change. Actual configured direct/indirect
 strengths are 32/8; the fallback macro value of 1 is not this profile's setting.
 Cache eligibility and cone gating are unchanged in the selected build.
+
+The subsequent [primary emitter correction](primary-nee-emission.md) removes
+duplicate first-secondary emission only for rough opaque surfaces and emitters
+covered by the primary area sampler. It adds a measured 17–18% reduction in
+early settling error across two comparisons. The following table predates it.
 
 The installed profile retains 48 candidates, history cap 8, strength 32, four
 bounces and SHaRC. Two launches with six turns each give:

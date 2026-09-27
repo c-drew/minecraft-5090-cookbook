@@ -99,7 +99,7 @@ the discrepancy between their cave intervals remains unresolved.
 
 ## Installed artifact and recovery
 
-The installed jar is
+The jar installed at this stage was
 `e54e3c58c21c1539f777c6cbb6582bd342549a8c16ba44f98d9760973da7f0a0`.
 Only five files in the advanced shader archive change from `579b9def…`; Java
 and native resources are identical. Native SHA remains
@@ -112,6 +112,8 @@ The local jar-only backup restores the preceding allocation-guard release.
 Run `tools/install-sharc-update-runtime.py restore` from the local development
 tree with Minecraft closed, before older allocation/native/frame-slot/cache
 rollbacks. This installer is machine-specific and is not part of the cookbook.
+The later [primary emitter correction](primary-nee-emission.md) supersedes this
+jar; its rollback must run first.
 
 See [full-precision evidence](../measurements/sharc-update-runtime-2026-09-27.json).
 Fine post-turn noise, rare long frames, and physical fullscreen pacing/comfort

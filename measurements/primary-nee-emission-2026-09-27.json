@@ -1,0 +1,1350 @@
+{
+  "date": "2026-09-27",
+  "selected": true,
+  "installed": true,
+  "artifact": {
+    "label": "release",
+    "jar": "Radiance-primary-nee-dedup-release.jar",
+    "sha256": "99c78c0eb5399cb73a92f7430ee03726a0a4cfb634acbf8d8d2639f847e2d777",
+    "base_sha256": "e54e3c58c21c1539f777c6cbb6582bd342549a8c16ba44f98d9760973da7f0a0",
+    "shader_entries_changed": [
+      "common/primary_nee_coverage.glsl",
+      "configs.json",
+      "util/ray.glsl",
+      "world/default.rchit",
+      "world/no_height.rchit",
+      "world/world.rgen"
+    ],
+    "native_sha256": "7ae07e54c58042e4539cc43656fb03c396b8ede54a9ce69a9161e6fda41bd1a1",
+    "shader_archive_sha256": "d3b05b17c1b50eadf7a177c905bf4c9eec27e34583f7ca1f1bfd1cbcdb6bea44"
+  },
+  "method": {
+    "scene": "Private saved torchlit cave copy; six alternating 180 degree yaw / +/-46 degree pitch turns per video; 3-second dwell",
+    "cave_comparison": "Two independent control/candidate pairs; second pair reverses order; manual exposure 2; cap 144 FPS; shared wall masks and motion threshold 3",
+    "input_size": [
+      1334,
+      750
+    ],
+    "output_size": [
+      2560,
+      1440
+    ],
+    "runtime": "DLSS 310.9.1 RR preset F",
+    "settings": {
+      "candidates": 48,
+      "history": 8,
+      "direct_strength": 32,
+      "indirect_strength": 8,
+      "bounces": 4,
+      "sharc_update_downsample": 5,
+      "SPBR": true,
+      "Voxy": "v17"
+    },
+    "materials": "Three fixed views, manual exposure 2, 30-second warmup, VSync 30 FPS",
+    "performance": "Two 30-second cave intervals with ten turns each; two 30-second forest traversals per build; VSync false and both FPS limits 260; native acquire-to-acquire timing; not physical display delivery"
+  },
+  "cave": {
+    "control": {
+      "relative_rms": {
+        "0.05": 0.029721072900398632,
+        "0.15": 0.023925230745963165,
+        "0.3": 0.020312669724669778,
+        "0.6": 0.015201353570606698,
+        "1.2": 0.011046504692057401,
+        "2.3": 0.003544171943078122
+      },
+      "settled_mean_8bit": [
+        81.74793175316078,
+        42.673021283543996
+      ],
+      "orientation_relative_rms": {
+        "0": {
+          "0.05": 0.02776611080502169,
+          "0.3": 0.01632376724098034
+        },
+        "1": {
+          "0.05": 0.03167603499577557,
+          "0.3": 0.024301572208359212
+        }
+      },
+      "gpu_pass_ms": {
+        "rt.pass.final_compose": 1.2164007,
+        "rt.sharc": 0.1366332,
+        "module.17DLSSModuleContext": 1.0236858
+      },
+      "motion_ends": [
+        1.65,
+        4.75,
+        7.916666666666667,
+        11.033333333333333,
+        14.183333333333334,
+        17.316666666666666
+      ],
+      "jar_sha256": "e54e3c58c21c1539f777c6cbb6582bd342549a8c16ba44f98d9760973da7f0a0"
+    },
+    "candidate": {
+      "relative_rms": {
+        "0.05": 0.02433318995143166,
+        "0.15": 0.020209582758910546,
+        "0.3": 0.017406833565141003,
+        "0.6": 0.01363838744190278,
+        "1.2": 0.010777166111821949,
+        "2.3": 0.0034760992422537204
+      },
+      "settled_mean_8bit": [
+        79.68268105506876,
+        42.47468082467652
+      ],
+      "orientation_relative_rms": {
+        "0": {
+          "0.05": 0.018367593247577238,
+          "0.3": 0.01136421255968814
+        },
+        "1": {
+          "0.05": 0.030298786655286084,
+          "0.3": 0.02344945457059387
+        }
+      },
+      "gpu_pass_ms": {
+        "rt.pass.final_compose": 1.2415417,
+        "rt.sharc": 0.1371557,
+        "module.17DLSSModuleContext": 1.0267476
+      },
+      "motion_ends": [
+        1.6333333333333333,
+        4.766666666666667,
+        7.916666666666667,
+        11.033333333333333,
+        14.183333333333334,
+        17.333333333333332
+      ],
+      "jar_sha256": "99c78c0eb5399cb73a92f7430ee03726a0a4cfb634acbf8d8d2639f847e2d777"
+    },
+    "candidate-repeat": {
+      "relative_rms": {
+        "0.05": 0.023994812976813083,
+        "0.15": 0.01947186229208039,
+        "0.3": 0.01722672181192241,
+        "0.6": 0.0136670946530578,
+        "1.2": 0.010748667253485278,
+        "2.3": 0.0035314787595685125
+      },
+      "settled_mean_8bit": [
+        79.63620986685365,
+        42.48925627659221
+      ],
+      "orientation_relative_rms": {
+        "0": {
+          "0.05": 0.019064588112203924,
+          "0.3": 0.011301555175603831
+        },
+        "1": {
+          "0.05": 0.028925037841422245,
+          "0.3": 0.023151888448240992
+        }
+      },
+      "gpu_pass_ms": {
+        "rt.pass.final_compose": 1.2604561,
+        "rt.sharc": 0.1394107,
+        "module.17DLSSModuleContext": 1.024476
+      },
+      "motion_ends": [
+        1.6333333333333333,
+        4.766666666666667,
+        7.883333333333334,
+        11.033333333333333,
+        14.183333333333334,
+        17.316666666666666
+      ],
+      "jar_sha256": "99c78c0eb5399cb73a92f7430ee03726a0a4cfb634acbf8d8d2639f847e2d777"
+    },
+    "control-repeat": {
+      "relative_rms": {
+        "0.05": 0.029015349943258252,
+        "0.15": 0.02332702133554779,
+        "0.3": 0.019587572178361504,
+        "0.6": 0.01471159373142706,
+        "1.2": 0.011000552481502899,
+        "2.3": 0.003558560684661768
+      },
+      "settled_mean_8bit": [
+        81.76881388017979,
+        42.6747098669289
+      ],
+      "orientation_relative_rms": {
+        "0": {
+          "0.05": 0.028795391461568134,
+          "0.3": 0.016215045004263958
+        },
+        "1": {
+          "0.05": 0.029235308424948373,
+          "0.3": 0.022960099352459053
+        }
+      },
+      "gpu_pass_ms": {
+        "rt.pass.final_compose": 1.197233,
+        "rt.sharc": 0.1372679,
+        "module.17DLSSModuleContext": 1.0239433
+      },
+      "motion_ends": [
+        1.6166666666666667,
+        4.75,
+        7.9,
+        11.016666666666667,
+        14.15,
+        17.3
+      ],
+      "jar_sha256": "e54e3c58c21c1539f777c6cbb6582bd342549a8c16ba44f98d9760973da7f0a0"
+    }
+  },
+  "materials": [
+    {
+      "view": "front",
+      "control_mean": 91.81476593017578,
+      "candidate_mean": 91.40394592285156,
+      "mean_delta": -0.41081997752189636,
+      "gray_rmse": 8.817089080810547
+    },
+    {
+      "view": "oblique",
+      "control_mean": 99.60758209228516,
+      "candidate_mean": 99.44709777832031,
+      "mean_delta": -0.16047905385494232,
+      "gray_rmse": 8.890599250793457
+    },
+    {
+      "view": "water",
+      "control_mean": 107.96932220458984,
+      "candidate_mean": 107.91004943847656,
+      "mean_delta": -0.059277769178152084,
+      "gray_rmse": 9.157458305358887
+    }
+  ],
+  "raw_validation": [
+    {
+      "id": "idle",
+      "frame": 4545,
+      "sentinels": [
+        {
+          "format": 97,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 109,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 37,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0019607841968536377,
+          "passed": true
+        }
+      ],
+      "hdr_exact_identity": true,
+      "hdr_nonfinite_before": 0,
+      "hdr_nonfinite_after": 0,
+      "eligible_pixels": 218248,
+      "eligible_nonfinite_pixels": 0,
+      "negative_remainder_pixels": 0,
+      "raw_luminance_quantiles": {
+        "0": 0.0,
+        "50": 1.0217248927801847e-05,
+        "90": 0.00043152933358214796,
+        "99": 0.004411070141941309,
+        "99.9": 0.4186556339263916,
+        "99.99": 1.8170207738876343,
+        "100": 2.443734645843506
+      },
+      "max_absolute_hdr_delta": 0.0,
+      "negative_remainder_min_rgb": [
+        -0.000732421875,
+        -0.0008544921875,
+        -0.00095367431640625
+      ]
+    },
+    {
+      "id": "return-settled",
+      "frame": 5508,
+      "sentinels": [
+        {
+          "format": 97,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 109,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 37,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0019607841968536377,
+          "passed": true
+        }
+      ],
+      "hdr_exact_identity": true,
+      "hdr_nonfinite_before": 0,
+      "hdr_nonfinite_after": 0,
+      "eligible_pixels": 228299,
+      "eligible_nonfinite_pixels": 0,
+      "negative_remainder_pixels": 0,
+      "raw_luminance_quantiles": {
+        "0": 0.0,
+        "50": 1.1470997378637549e-05,
+        "90": 0.0005188670475035906,
+        "99": 0.004454809706658125,
+        "99.9": 0.4174042344093323,
+        "99.99": 1.805403232574463,
+        "100": 2.4952964782714844
+      },
+      "max_absolute_hdr_delta": 0.0,
+      "negative_remainder_min_rgb": [
+        -0.00043773651123046875,
+        -0.00048732757568359375,
+        -0.0009565353393554688
+      ]
+    },
+    {
+      "id": "turn-early",
+      "frame": 4626,
+      "sentinels": [
+        {
+          "format": 97,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 109,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 37,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0019607841968536377,
+          "passed": true
+        }
+      ],
+      "hdr_exact_identity": true,
+      "hdr_nonfinite_before": 0,
+      "hdr_nonfinite_after": 0,
+      "eligible_pixels": 491920,
+      "eligible_nonfinite_pixels": 0,
+      "negative_remainder_pixels": 0,
+      "raw_luminance_quantiles": {
+        "0": 0.0,
+        "50": 0.0,
+        "90": 0.0008624104084447026,
+        "99": 0.014062721282243729,
+        "99.9": 0.6655464768409729,
+        "99.99": 1.644669532775879,
+        "100": 3.1790101528167725
+      },
+      "max_absolute_hdr_delta": 0.0,
+      "negative_remainder_min_rgb": [
+        -0.0008668899536132812,
+        -0.00080108642578125,
+        -0.00039958953857421875
+      ]
+    },
+    {
+      "id": "turn-settled",
+      "frame": 5031,
+      "sentinels": [
+        {
+          "format": 97,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 109,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0,
+          "passed": true
+        },
+        {
+          "format": 37,
+          "shape": [
+            2,
+            2,
+            3,
+            4
+          ],
+          "max_error": 0.0019607841968536377,
+          "passed": true
+        }
+      ],
+      "hdr_exact_identity": true,
+      "hdr_nonfinite_before": 0,
+      "hdr_nonfinite_after": 0,
+      "eligible_pixels": 499013,
+      "eligible_nonfinite_pixels": 0,
+      "negative_remainder_pixels": 0,
+      "raw_luminance_quantiles": {
+        "0": 0.0,
+        "50": 5.79928155275411e-06,
+        "90": 0.0014044295530766249,
+        "99": 0.011601095087826252,
+        "99.9": 0.7029610872268677,
+        "99.99": 1.7470017671585083,
+        "100": 4.945165634155273
+      },
+      "max_absolute_hdr_delta": 0.0,
+      "negative_remainder_min_rgb": [
+        -0.003543853759765625,
+        -0.0018939971923828125,
+        -0.0008068084716796875
+      ]
+    }
+  ],
+  "raw_source_attribution": [
+    {
+      "id": "idle",
+      "eligible_pixels": 218248,
+      "component_sum_mismatch_pixels": 0,
+      "max_sum_error": 0.0014083385467529297,
+      "mean_luminance": 0.001407658332027495,
+      "component_mean": {
+        "hit_direct": 0.0,
+        "hit_other": 0.0006059067168338816,
+        "cached": 0.0008022338465506479,
+        "miss": 0.0
+      },
+      "thresholds": [
+        {
+          "threshold": 0.001,
+          "count": 10394,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 86,
+            "cached": 10308,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 132.237929135561,
+            "cached": 158.08024877810385,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 149,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 8991,
+            "1": 1403,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.0990855693817139
+        },
+        {
+          "threshold": 0.1,
+          "count": 342,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 86,
+            "cached": 256,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 132.237929135561,
+            "cached": 122.57536173972767,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 86,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 295,
+            "1": 47,
+            "2": 0
+          },
+          "max_incoming_throughput": 0.6718088388442993
+        },
+        {
+          "threshold": 0.5,
+          "count": 172,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 85,
+            "cached": 87,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 132.0089631676674,
+            "cached": 63.640734218090074,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 85,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 147,
+            "1": 25,
+            "2": 0
+          },
+          "max_incoming_throughput": 0.6718088388442993
+        },
+        {
+          "threshold": 1,
+          "count": 93,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 81,
+            "cached": 12,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 128.27306628227234,
+            "cached": 14.280744542633329,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 81,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 78,
+            "1": 15,
+            "2": 0
+          },
+          "max_incoming_throughput": 0.6718088388442993
+        },
+        {
+          "threshold": 2,
+          "count": 6,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 6,
+            "cached": 0,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 12.840679407119751,
+            "cached": 0.011305003863526508,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 6,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 6,
+            "1": 0,
+            "2": 0
+          },
+          "max_incoming_throughput": 0.3632000684738159
+        }
+      ]
+    },
+    {
+      "id": "return-settled",
+      "eligible_pixels": 228299,
+      "component_sum_mismatch_pixels": 0,
+      "max_sum_error": 0.0017087459564208984,
+      "mean_luminance": 0.0013418950838968158,
+      "component_mean": {
+        "hit_direct": 0.0,
+        "hit_other": 0.000432882520843261,
+        "cached": 0.0009095015499859082,
+        "miss": 0.0
+      },
+      "thresholds": [
+        {
+          "threshold": 0.001,
+          "count": 12528,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 65,
+            "cached": 12463,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 98.82664662599564,
+            "cached": 188.56423272790175,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 165,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 10771,
+            "1": 1757,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.1290780305862427
+        },
+        {
+          "threshold": 0.1,
+          "count": 394,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 65,
+            "cached": 329,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 98.82664662599564,
+            "cached": 148.48265778125983,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 67,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 347,
+            "1": 47,
+            "2": 0
+          },
+          "max_incoming_throughput": 0.4673394560813904
+        },
+        {
+          "threshold": 0.5,
+          "count": 186,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 63,
+            "cached": 123,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 98.10729938745499,
+            "cached": 81.90509294571143,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 63,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 165,
+            "1": 21,
+            "2": 0
+          },
+          "max_incoming_throughput": 0.4498966932296753
+        },
+        {
+          "threshold": 1,
+          "count": 67,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 59,
+            "cached": 8,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 94.785196185112,
+            "cached": 9.031837154699815,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 59,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 59,
+            "1": 8,
+            "2": 0
+          },
+          "max_incoming_throughput": 0.4498966932296753
+        },
+        {
+          "threshold": 2,
+          "count": 6,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 6,
+            "cached": 0,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 13.52770709991455,
+            "cached": 0.01602284954424249,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 6,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 6,
+            "1": 0,
+            "2": 0
+          },
+          "max_incoming_throughput": 0.4498966932296753
+        }
+      ]
+    },
+    {
+      "id": "turn-early",
+      "eligible_pixels": 491920,
+      "component_sum_mismatch_pixels": 0,
+      "max_sum_error": 0.0017499923706054688,
+      "mean_luminance": 0.00213856203481555,
+      "component_mean": {
+        "hit_direct": 0.0,
+        "hit_other": 6.376553776981889e-06,
+        "cached": 0.0021329298729663893,
+        "miss": 7.082548485164634e-09
+      },
+      "thresholds": [
+        {
+          "threshold": 0.001,
+          "count": 45621,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 4,
+            "cached": 45616,
+            "miss": 1
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 3.136754333972931,
+            "cached": 1018.0738505977642,
+            "miss": 0.0034840472508221865
+          },
+          "emissive_hit_pixels": 1004,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 39907,
+            "1": 5714,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.533178448677063
+        },
+        {
+          "threshold": 0.1,
+          "count": 1066,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 4,
+            "cached": 1062,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 3.136754333972931,
+            "cached": 755.5442149487062,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 18,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 906,
+            "1": 160,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.1487339735031128
+        },
+        {
+          "threshold": 0.5,
+          "count": 676,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 3,
+            "cached": 673,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 2.669579803943634,
+            "cached": 648.4792346117756,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 4,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 571,
+            "1": 105,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.1214978694915771
+        },
+        {
+          "threshold": 1,
+          "count": 244,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 1,
+            "cached": 243,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 1.3461406230926514,
+            "cached": 340.8023503182194,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 1,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 207,
+            "1": 37,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.1214978694915771
+        },
+        {
+          "threshold": 2,
+          "count": 22,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 0,
+            "cached": 22,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 0.0,
+            "cached": 52.90838575363159,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 0,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 19,
+            "1": 3,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.1214978694915771
+        }
+      ]
+    },
+    {
+      "id": "turn-settled",
+      "eligible_pixels": 499013,
+      "component_sum_mismatch_pixels": 0,
+      "max_sum_error": 0.002300739288330078,
+      "mean_luminance": 0.0022890132386237383,
+      "component_mean": {
+        "hit_direct": 0.0,
+        "hit_other": 7.712115142331062e-07,
+        "cached": 0.0022890650527528805,
+        "miss": 0.0
+      },
+      "thresholds": [
+        {
+          "threshold": 0.001,
+          "count": 58668,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 2,
+            "cached": 58666,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 0.384844571352005,
+            "cached": 1109.3749381353846,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 1207,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 50658,
+            "1": 8010,
+            "2": 0
+          },
+          "max_incoming_throughput": 2.710237979888916
+        },
+        {
+          "threshold": 0.1,
+          "count": 1042,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 2,
+            "cached": 1040,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 0.384844571352005,
+            "cached": 831.552573107183,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 9,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 893,
+            "1": 149,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.1701172590255737
+        },
+        {
+          "threshold": 0.5,
+          "count": 716,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 0,
+            "cached": 716,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 0.0,
+            "cached": 719.2663317918777,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 0,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 621,
+            "1": 95,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.1701172590255737
+        },
+        {
+          "threshold": 1,
+          "count": 272,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 0,
+            "cached": 272,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 0.0,
+            "cached": 398.4303574562073,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 0,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 229,
+            "1": 43,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.1701172590255737
+        },
+        {
+          "threshold": 2,
+          "count": 30,
+          "dominant_component": {
+            "hit_direct": 0,
+            "hit_other": 0,
+            "cached": 30,
+            "miss": 0
+          },
+          "component_luminance_sum": {
+            "hit_direct": 0.0,
+            "hit_other": 0.0,
+            "cached": 81.6052405834198,
+            "miss": 0.0
+          },
+          "emissive_hit_pixels": 0,
+          "first_lobe_counts": {
+            "-1": 0,
+            "0": 22,
+            "1": 8,
+            "2": 0
+          },
+          "max_incoming_throughput": 1.1579629182815552
+        }
+      ]
+    }
+  ],
+  "shader_compile": {
+    "release": {
+      "compiled": 173,
+      "failed": 0
+    },
+    "raw": {
+      "compiled": 174,
+      "failed": 0
+    }
+  },
+  "vulkan_validation": {
+    "raw": {
+      "khronos_instance_and_device_confirmed": true,
+      "synchronization_validation_enabled": true,
+      "reported_errors": 0
+    },
+    "materials-candidate": {
+      "khronos_instance_and_device_confirmed": true,
+      "synchronization_validation_enabled": true,
+      "reported_errors": 0
+    }
+  },
+  "public_stack_replay": {
+    "base_commit": "9905c81b1999f5845bf66d13501d371c16adf561",
+    "patches": [
+      "0001-Optimize-world-prepare-CPU-profiling-path.patch",
+      "0002-Cache-SBT-mappings-and-TLAS-buffers.patch",
+      "0003-Reuse-ray-tracing-upload-buffers.patch",
+      "0004-Fixed-render-scale-for-DLSS-RR-fork-settings-file-fr.patch",
+      "0005-World-prepare-stable-chunk-slots-and-change-tracked-.patch",
+      "0006-Chunk-builds-pack-vertices-on-the-queueing-thread-op.patch",
+      "0007-Frame-limiter-schedule-deadlines-from-the-previous-d.patch",
+      "0008-GPU-smaller-SHaRC-table-cheaper-surface-cache-clears.patch",
+      "0009-Device-optional-global-queue-priority-ray-query-and-.patch",
+      "0010-Shaders-per-block-texture-tiling-for-LoD-terrain-qua.patch",
+      "0011-DLSS-RR-use-the-effected-camera-view-for-ray-reconst.patch",
+      "0012-Shaders-add-an-optional-camera-player-block-light-sh.patch",
+      "0013-Render-decouple-frame-resource-slots-from-swapchain-.patch",
+      "0001-ReSTIR-retain-attempted-counts-when-samples-contribu.patch",
+      "0002-Use-cheaper-importance-targets-for-rough-opaque-ligh.patch",
+      "0003-Distribute-light-source-candidates-with-randomized-H.patch",
+      "0004-Correct-cached-radiance-energy-bookkeeping.patch",
+      "0005-Identify-SHaRC-updates-in-shared-hit-shaders.patch",
+      "0006-Avoid-duplicate-primary-emission-for-area-sampled-lights.patch"
+    ],
+    "patch_count": 19,
+    "tested_sources_exact": true,
+    "source_sha256": {
+      "src/shader/world/ray_tracing/internal/advanced/common/primary_nee_coverage.glsl": "671f60c8dd928929f4c88a7ebc4b55037962989c373e175e326a98e4d37bf340",
+      "src/shader/world/ray_tracing/internal/advanced/configs.json": "46f25c5e41e27a26ded943f46bbb878c32dcca91c0a860ca756af0afcbec7352",
+      "src/shader/util/ray.glsl": "7d92619534c6cb878fb4ddfe7ed165a37d480c24fc294a9a031dbdb52f9bad0b",
+      "src/shader/world/ray_tracing/internal/advanced/world/default.rchit": "8d0068167dfe7808f04197f610ecef011443cec5e5c7d3e197461195cdd6fe2f",
+      "src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit": "8d0068167dfe7808f04197f610ecef011443cec5e5c7d3e197461195cdd6fe2f",
+      "src/shader/world/ray_tracing/internal/advanced/world/world.rgen": "533eab26a1c5d59dd3a3f0e089b5332a958c43e6c5d7a905b762abd39601bd77"
+    }
+  },
+  "performance": {
+    "release-tests/cave": [
+      {
+        "label": "primary-nee-dedup-release-cave-a",
+        "jar_sha256": "99c78c0eb5399cb73a92f7430ee03726a0a4cfb634acbf8d8d2639f847e2d777",
+        "engine_metrics": {
+          "scope": "engine acquire-to-acquire wall interval; not display delivery",
+          "frames": 5778,
+          "seconds": 29.996290000000002,
+          "window_seconds": 30.0,
+          "window_coverage": 0.9998763333333334,
+          "fps": 192.62382114588172,
+          "one_percent_low": 156.6497833011331,
+          "median_ms": 5.158,
+          "p99_ms": 6.27,
+          "worst_ms": 6.649,
+          "over_144_count": 0,
+          "over_144_percent": 0.0
+        },
+        "metrics": {
+          "frames": 5658,
+          "seconds": 29.790474504000002,
+          "fps": 189.9264813402114,
+          "one_percent_low": 81.81852184320766,
+          "median_ms": 5.12176,
+          "p99_ms": 10.2105,
+          "worst_ms": 41.3718,
+          "over_144_count": 62,
+          "over_144_percent": 1.0957935666313185
+        },
+        "gpu_utilization_mean": 98.97058823529412,
+        "gpu_graphics_clock_mhz_mean": 2926.8529411764707,
+        "gpu_temperature_c_max": 68.0,
+        "gpu_power_w_mean": 502.6241176470588,
+        "timed_turn_count": 10
+      },
+      {
+        "label": "primary-nee-dedup-release-cave-b",
+        "jar_sha256": "99c78c0eb5399cb73a92f7430ee03726a0a4cfb634acbf8d8d2639f847e2d777",
+        "engine_metrics": {
+          "scope": "engine acquire-to-acquire wall interval; not display delivery",
+          "frames": 5773,
+          "seconds": 29.991241000000002,
+          "window_seconds": 30.0,
+          "window_coverage": 0.9997080333333334,
+          "fps": 192.48953386090292,
+          "one_percent_low": 155.87825088194273,
+          "median_ms": 5.169,
+          "p99_ms": 6.286,
+          "worst_ms": 7.383,
+          "over_144_count": 1,
+          "over_144_percent": 0.017322016282695307
+        },
+        "metrics": {
+          "frames": 5620,
+          "seconds": 29.585781979,
+          "fps": 189.9561081058827,
+          "one_percent_low": 80.39006292115869,
+          "median_ms": 5.12655,
+          "p99_ms": 8.85682,
+          "worst_ms": 58.0774,
+          "over_144_count": 57,
+          "over_144_percent": 1.0142348754448398
+        },
+        "gpu_utilization_mean": 99.0,
+        "gpu_graphics_clock_mhz_mean": 2924.529411764706,
+        "gpu_temperature_c_max": 70.0,
+        "gpu_power_w_mean": 510.6411764705882,
+        "timed_turn_count": 10
+      }
+    ],
+    "release-tests/forest": [
+      {
+        "label": "primary-nee-dedup-release-forest-a",
+        "jar_sha256": "99c78c0eb5399cb73a92f7430ee03726a0a4cfb634acbf8d8d2639f847e2d777",
+        "engine_metrics": {
+          "scope": "engine acquire-to-acquire wall interval; not display delivery",
+          "frames": 6626,
+          "seconds": 29.996091,
+          "window_seconds": 30.0,
+          "window_coverage": 0.9998697,
+          "fps": 220.89544934371614,
+          "one_percent_low": 142.93015479768886,
+          "median_ms": 4.4805,
+          "p99_ms": 6.104,
+          "worst_ms": 15.797,
+          "over_144_count": 21,
+          "over_144_percent": 0.3169332930878358
+        },
+        "metrics": {
+          "frames": 6595,
+          "seconds": 29.8647361,
+          "fps": 220.82900642138944,
+          "one_percent_low": 169.540128400825,
+          "median_ms": 4.49045,
+          "p99_ms": 5.29715,
+          "worst_ms": 15.3884,
+          "over_144_count": 5,
+          "over_144_percent": 0.0758150113722517
+        },
+        "gpu_utilization_mean": 98.52380952380952,
+        "gpu_graphics_clock_mhz_mean": 2931.2380952380954,
+        "gpu_temperature_c_max": 67.0,
+        "gpu_power_w_mean": 446.5109523809524,
+        "movement": {
+          "start_position": [
+            -18.5,
+            80.0,
+            -55.5
+          ],
+          "end_position": [
+            172.3145464840932,
+            80.0,
+            -55.5
+          ],
+          "horizontal_distance": 190.8145464840932,
+          "minimum_expected_distance": 60.0,
+          "validated": true
+        },
+        "timed_turn_count": 0
+      },
+      {
+        "label": "primary-nee-dedup-release-forest-b",
+        "jar_sha256": "99c78c0eb5399cb73a92f7430ee03726a0a4cfb634acbf8d8d2639f847e2d777",
+        "engine_metrics": {
+          "scope": "engine acquire-to-acquire wall interval; not display delivery",
+          "frames": 6590,
+          "seconds": 29.995369999999998,
+          "window_seconds": 30.0,
+          "window_coverage": 0.9998456666666666,
+          "fps": 219.7005737885547,
+          "one_percent_low": 148.69072101274392,
+          "median_ms": 4.521,
+          "p99_ms": 6.053,
+          "worst_ms": 18.185,
+          "over_144_count": 13,
+          "over_144_percent": 0.19726858877086495
+        },
+        "metrics": {
+          "frames": 6575,
+          "seconds": 29.93269046,
+          "fps": 219.65950601020583,
+          "one_percent_low": 177.42280599845216,
+          "median_ms": 4.51925,
+          "p99_ms": 5.27486,
+          "worst_ms": 15.6411,
+          "over_144_count": 1,
+          "over_144_percent": 0.015209125475285171
+        },
+        "gpu_utilization_mean": 98.69047619047619,
+        "gpu_graphics_clock_mhz_mean": 2931.5714285714284,
+        "gpu_temperature_c_max": 68.0,
+        "gpu_power_w_mean": 444.6059523809524,
+        "movement": {
+          "start_position": [
+            -18.5,
+            80.0,
+            -55.5
+          ],
+          "end_position": [
+            172.3145464840932,
+            80.0,
+            -55.5
+          ],
+          "horizontal_distance": 190.8145464840932,
+          "minimum_expected_distance": 60.0,
+          "validated": true
+        },
+        "timed_turn_count": 0
+      }
+    ],
+    "forest-control/forest": [
+      {
+        "label": "primary-nee-dedup-control-now-forest-a",
+        "jar_sha256": "e54e3c58c21c1539f777c6cbb6582bd342549a8c16ba44f98d9760973da7f0a0",
+        "engine_metrics": {
+          "scope": "engine acquire-to-acquire wall interval; not display delivery",
+          "frames": 6645,
+          "seconds": 29.99752,
+          "window_seconds": 30.0,
+          "window_coverage": 0.9999173333333334,
+          "fps": 221.51831218047357,
+          "one_percent_low": 140.38819462908802,
+          "median_ms": 4.475,
+          "p99_ms": 6.103,
+          "worst_ms": 12.188,
+          "over_144_count": 25,
+          "over_144_percent": 0.3762227238525207
+        },
+        "metrics": {
+          "frames": 6614,
+          "seconds": 29.86509191,
+          "fps": 221.4625697430174,
+          "one_percent_low": 168.31250797571772,
+          "median_ms": 4.48022,
+          "p99_ms": 5.2668,
+          "worst_ms": 10.8681,
+          "over_144_count": 8,
+          "over_144_percent": 0.12095554883580284
+        },
+        "gpu_utilization_mean": 98.21428571428571,
+        "gpu_graphics_clock_mhz_mean": 2932.9523809523807,
+        "gpu_temperature_c_max": 66.0,
+        "gpu_power_w_mean": 443.41761904761904,
+        "movement": {
+          "start_position": [
+            -18.5,
+            80.0,
+            -55.5
+          ],
+          "end_position": [
+            172.3145464840932,
+            80.0,
+            -55.5
+          ],
+          "horizontal_distance": 190.8145464840932,
+          "minimum_expected_distance": 60.0,
+          "validated": true
+        },
+        "timed_turn_count": 0
+      },
+      {
+        "label": "primary-nee-dedup-control-now-forest-b",
+        "jar_sha256": "e54e3c58c21c1539f777c6cbb6582bd342549a8c16ba44f98d9760973da7f0a0",
+        "engine_metrics": {
+          "scope": "engine acquire-to-acquire wall interval; not display delivery",
+          "frames": 6602,
+          "seconds": 29.992831,
+          "window_seconds": 30.0,
+          "window_coverage": 0.9997610333333333,
+          "fps": 220.11926783437016,
+          "one_percent_low": 153.56372545597955,
+          "median_ms": 4.521,
+          "p99_ms": 5.967,
+          "worst_ms": 9.419,
+          "over_144_count": 10,
+          "over_144_percent": 0.1514692517418964
+        },
+        "metrics": {
+          "frames": 6569,
+          "seconds": 29.85348327,
+          "fps": 220.0413245110744,
+          "one_percent_low": 182.3900140513267,
+          "median_ms": 4.51561,
+          "p99_ms": 5.24572,
+          "worst_ms": 7.13651,
+          "over_144_count": 2,
+          "over_144_percent": 0.030446034404018878
+        },
+        "gpu_utilization_mean": 98.61904761904762,
+        "gpu_graphics_clock_mhz_mean": 2933.2380952380954,
+        "gpu_temperature_c_max": 67.0,
+        "gpu_power_w_mean": 442.46190476190475,
+        "movement": {
+          "start_position": [
+            -18.5,
+            80.0,
+            -55.5
+          ],
+          "end_position": [
+            172.3145464840932,
+            80.0,
+            -55.5
+          ],
+          "horizontal_distance": 190.8145464840932,
+          "minimum_expected_distance": 60.0,
+          "validated": true
+        },
+        "timed_turn_count": 0
+      }
+    ]
+  },
+  "installation": {
+    "time": "2026-09-27T13:03:31.974686-04:00",
+    "normal_game_launched": false,
+    "six_protected_files_unchanged": true,
+    "rollback": "tools/install-primary-nee-dedup.py restore"
+  },
+  "limits": [
+    "Partial improvement; residual cached-light noise remains.",
+    "Convergence is relative to each capture's settled view, not ground-truth error or an artifact count.",
+    "Raw threshold counts compare different random frames, not paired variance.",
+    "Support matching is conservative; unusual or unmatched emitters retain original emission.",
+    "The bright wall becomes about 2 gray levels darker.",
+    "Candidate outdoor averages differ by less than 0.3% from fresh controls; longest individual stalls are worse.",
+    "Strict 144 FPS floor and physical fullscreen comfort are unverified."
+  ]
+}

@@ -1,0 +1,217 @@
+From 49ed2474ad9c405745a548f26e4b9d101a392586 Mon Sep 17 00:00:00 2001
+From: c-drew <101952850+c-drew@users.noreply.github.com>
+Date: Sun, 27 Sep 2026 12:52:15 -0400
+Subject: [PATCH] Avoid duplicate primary emission for area-sampled lights
+
+---
+ src/shader/util/ray.glsl                      |  9 +++
+ .../advanced/common/primary_nee_coverage.glsl | 64 +++++++++++++++++++
+ .../internal/advanced/configs.json            |  5 +-
+ .../internal/advanced/world/default.rchit     |  7 ++
+ .../internal/advanced/world/no_height.rchit   |  7 ++
+ .../internal/advanced/world/world.rgen        | 11 ++++
+ 6 files changed, 102 insertions(+), 1 deletion(-)
+ create mode 100644 src/shader/world/ray_tracing/internal/advanced/common/primary_nee_coverage.glsl
+
+diff --git a/src/shader/util/ray.glsl b/src/shader/util/ray.glsl
+index 4b6f89d..ad06e80 100644
+--- a/src/shader/util/ray.glsl
++++ b/src/shader/util/ray.glsl
+@@ -26,6 +26,15 @@ const uint raySurfaceCacheTargetSecondaryBit = 1u << 18u;
+ const uint rayIndirectVolumetricCloudBit = 1u << 19u;
+ // Shared hit shaders need the update/query distinction in the ray payload.
+ const uint raySharcUpdateBit = 1u << 20u;
++const uint rayPrimaryAreaNeeBit = 1u << 21u;
++
++void raySetPrimaryAreaNee(inout MainRay ray, bool enabled) {
++    ray.stateBits = enabled ? (ray.stateBits | rayPrimaryAreaNeeBit) : (ray.stateBits & ~rayPrimaryAreaNeeBit);
++}
++
++bool rayHasPrimaryAreaNee(MainRay ray) {
++    return (ray.stateBits & rayPrimaryAreaNeeBit) != 0u;
++}
+ 
+ ivec3 rayMaterialStateCoord(int layer) {
+     return ivec3(ivec2(gl_LaunchIDEXT.xy), layer);
+diff --git a/src/shader/world/ray_tracing/internal/advanced/common/primary_nee_coverage.glsl b/src/shader/world/ray_tracing/internal/advanced/common/primary_nee_coverage.glsl
+new file mode 100644
+index 0000000..e1e71e6
+--- /dev/null
++++ b/src/shader/world/ray_tracing/internal/advanced/common/primary_nee_coverage.glsl
+@@ -0,0 +1,64 @@
++#ifndef ADV_PRIMARY_NEE_COVERAGE_GLSL
++#define ADV_PRIMARY_NEE_COVERAGE_GLSL
++
++#include "common/light.glsl"
++#include "common/light_neighborhood.glsl"
++
++// A conservative support test for the existing area-light proposal. This
++// does not test whether its one realized sample selected this emitter: a
++// sampled estimator accounts for every light in its proposal's support.
++bool primaryNeePointOnTriangle(vec3 point, vec3 a, vec3 b, vec3 c) {
++    vec3 e0 = b - a;
++    vec3 e1 = c - a;
++    vec3 q = point - a;
++    vec3 n = cross(e0, e1);
++    float n2 = dot(n, n);
++    if (!(n2 > 1e-12)) { return false; }
++    // Much tighter than reservoir reuse's 0.02-block plane tolerance.
++    if (abs(dot(q, n)) > 0.0005 * sqrt(n2)) { return false; }
++    float d00 = dot(e0, e0), d01 = dot(e0, e1), d11 = dot(e1, e1);
++    float d20 = dot(q, e0), d21 = dot(q, e1);
++    float denominator = d00 * d11 - d01 * d01;
++    if (!(denominator > 1e-12)) { return false; }
++    float v = (d11 * d20 - d01 * d21) / denominator;
++    float w = (d00 * d21 - d01 * d20) / denominator;
++    return v >= -0.0001 && w >= -0.0001 && v + w <= 1.0001;
++}
++
++bool primaryNeeCoversEmitter(vec3 sceneOrigin, vec3 sceneHit, vec3 direction) {
++    vec3 origin = sceneOrigin + vec3(worldUBO.cameraPos.xyz);
++    vec3 point = sceneHit + vec3(worldUBO.cameraPos.xyz);
++    if (any(isnan(origin)) || any(isinf(origin)) || any(isnan(point)) || any(isinf(point))) { return false; }
++    int centerIndex;
++    ivec3 centerOrigin;
++    if (!tryGetChunkIndexFromSectionCoordinate(ivec3(floor(origin / 16.0)), worldUBO,
++                                               centerIndex, centerOrigin)) { return false; }
++    if (!chunkPackedDataMatchesOrigin(chunkPackedData[centerIndex], centerOrigin)) { return false; }
++    uint count = min(chunkLightNeighborhoods[centerIndex].header.x, uint(ADV_CHUNK_NEIGHBORHOOD_CAPACITY));
++    for (uint n = 0u; n < count; ++n) {
++        ChunkLightNeighborhoodEntry entry = chunkLightNeighborhoods[centerIndex].entries[n];
++        if (!(entry.probability > 1e-8) || entry.chunkIndex >= uint(chunkPackedData.length())) { continue; }
++        ChunkLightData data = chunkPackedData[entry.chunkIndex];
++        if (!chunkPackedDataHasLights(data)) { continue; }
++        ivec3 expectedSection = ivec3(data.x, data.y, data.z) / 16;
++        int checkedIndex;
++        ivec3 checkedOrigin;
++        if (!tryGetChunkIndexFromSectionCoordinate(expectedSection, worldUBO, checkedIndex, checkedOrigin) ||
++            checkedIndex != int(entry.chunkIndex) || !chunkPackedDataMatchesOrigin(data, checkedOrigin)) { continue; }
++        // Only skip far chunk boxes. Unusually extended block geometry keeps
++        // its original BSDF-hit emission if this conservative search misses it.
++        vec3 chunkOrigin = vec3(data.x, data.y, data.z);
++        if (any(lessThan(point, chunkOrigin - 1.0)) || any(greaterThan(point, chunkOrigin + 17.0))) { continue; }
++        ChunkPackedLightBuffer lightBuffer = ChunkPackedLightBuffer(data.lightBufferAddress);
++        for (uint i = 0u; i < data.lightCount; ++i) {
++            ChunkPackedLight light = lightBuffer.lights[i];
++            if (!(light.p0Area.w > 1e-8) || !(max(light.radiance.r, max(light.radiance.g, light.radiance.b)) > 1e-8) ||
++                !(dot(light.normal.xyz, -direction) > 1e-6)) { continue; }
++            if (primaryNeePointOnTriangle(point, light.p0Area.xyz, light.p1.xyz, light.p2.xyz) ||
++                primaryNeePointOnTriangle(point, light.p0Area.xyz, light.p2.xyz, light.p3.xyz)) { return true; }
++        }
++    }
++    return false;
++}
++
++#endif
+diff --git a/src/shader/world/ray_tracing/internal/advanced/configs.json b/src/shader/world/ray_tracing/internal/advanced/configs.json
+index 6dd871c..e87fe71 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/configs.json
++++ b/src/shader/world/ray_tracing/internal/advanced/configs.json
+@@ -1,7 +1,7 @@
+ {
+     "radiance": {
+         "shader_pack": true,
+-        "display_name": "§8§kXX §r§b§lAdvanced§r §8§kXX§r"
++        "display_name": "\u00a78\u00a7kXX \u00a7r\u00a7b\u00a7lAdvanced\u00a7r \u00a78\u00a7kXX\u00a7r"
+     },
+     "requires_emission": true,
+     "sharc": {
+@@ -1956,6 +1956,9 @@
+                     "cont_refraction_radiance",
+                     "volumetric_cloud_temporal",
+                     "volumetric_light"
++                ],
++                "buffers": [
++                    "restir_light_neighborhoods"
+                 ]
+             },
+             "outputs": {
+diff --git a/src/shader/world/ray_tracing/internal/advanced/world/default.rchit b/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
+index fe9e62c..e086344 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/world/default.rchit
+@@ -90,6 +90,8 @@ struct SampledSurface {
+     LabPBRMat mat;
+ };
+ 
++#include "common/primary_nee_coverage.glsl"
++
+ bool isFiniteFloat(float value) {
+     return !isnan(value) && !isinf(value);
+ }
+@@ -613,6 +615,11 @@ void main() {
+         // Hit shaders are shared, so a ray flag carries the update distinction.
+         float emissionFactor = (bounce == 0u && localBounce == 0 && !rayIsSharcUpdate(mainRay)) ?
+                                    ADV_DIRECT_LIGHT_STRENGTH : ADV_INDIRECT_LIGHT_STRENGTH;
++        if (rayHasPrimaryAreaNee(mainRay) && !rayIsSharcUpdate(mainRay) &&
++            bounce == 1u && localBounce == 0 && currentSurface.mat.emission > EPS &&
++            primaryNeeCoversEmitter(gl_WorldRayOriginEXT, currentSurface.worldPos, gl_WorldRayDirectionEXT)) {
++            emissionFactor = 0.0;
++        }
+         vec3 emissionRadiance = emissionFactor * currentSurface.tint * currentSurface.mat.emission * mainRay.throughput;
+         emissionRadiance += currentSurface.tint * albedoEmission * mainRay.throughput;
+         mainRay.radiance += emissionRadiance;
+diff --git a/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit b/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
+index fe9e62c..e086344 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
++++ b/src/shader/world/ray_tracing/internal/advanced/world/no_height.rchit
+@@ -90,6 +90,8 @@ struct SampledSurface {
+     LabPBRMat mat;
+ };
+ 
++#include "common/primary_nee_coverage.glsl"
++
+ bool isFiniteFloat(float value) {
+     return !isnan(value) && !isinf(value);
+ }
+@@ -613,6 +615,11 @@ void main() {
+         // Hit shaders are shared, so a ray flag carries the update distinction.
+         float emissionFactor = (bounce == 0u && localBounce == 0 && !rayIsSharcUpdate(mainRay)) ?
+                                    ADV_DIRECT_LIGHT_STRENGTH : ADV_INDIRECT_LIGHT_STRENGTH;
++        if (rayHasPrimaryAreaNee(mainRay) && !rayIsSharcUpdate(mainRay) &&
++            bounce == 1u && localBounce == 0 && currentSurface.mat.emission > EPS &&
++            primaryNeeCoversEmitter(gl_WorldRayOriginEXT, currentSurface.worldPos, gl_WorldRayDirectionEXT)) {
++            emissionFactor = 0.0;
++        }
+         vec3 emissionRadiance = emissionFactor * currentSurface.tint * currentSurface.mat.emission * mainRay.throughput;
+         emissionRadiance += currentSurface.tint * albedoEmission * mainRay.throughput;
+         mainRay.radiance += emissionRadiance;
+diff --git a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+index c66a06d..a447e56 100644
+--- a/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
++++ b/src/shader/world/ray_tracing/internal/advanced/world/world.rgen
+@@ -756,6 +756,8 @@ bool initPreparedSurfaceContinuation(MainRay incomingRayState,
+     return false;
+ }
+ 
++bool primaryAreaNeeAccounted = false;
++
+ void traceSecondary(inout MainRay rayState,
+                    int startBounce,
+                    int isHand,
+@@ -777,6 +779,7 @@ void traceSecondary(inout MainRay rayState,
+         float len;
+         uint firstBounceLobeType = b == startBounce ? rayLobeType(rayState) : 0u;
+         resetMainRay(rayState, b);
++        raySetPrimaryAreaNee(rayState, primaryAreaNeeAccounted && b == startBounce);
+         prepareSecondary(b, isHand, len, mask);
+ 
+         vec3 tracedOrigin = rayState.origin;
+@@ -1342,6 +1345,14 @@ void main() {
+             initializedContinuation =
+                 initPreparedSurfaceContinuation(primaryViewState, primaryPrepared, 0xA511E9B3u, mainRay);
+             if (initializedContinuation) {
++                // The light sampler already estimates direct emission on this
++                // rough opaque surface. Partition only emitter hits with
++                // matching proposal support; retain all later path vertices.
++                primaryAreaNeeAccounted = ADV_ENABLE_RESTIR != 0 && startBounce == 1 && isHand == 0 &&
++                    firstHitMat.roughness >= 0.5 && firstHitMat.metallic < 0.5 && firstHitMat.emission <= EPS &&
++                    imageLoad(firstHitDiffuseDirectLightImage, pixel).a > 0.5 &&
++                    all(equal(ivec3(floor((mainRay.origin + vec3(worldUBO.cameraPos.xyz)) / 16.0)),
++                              ivec3(floor((primaryPrepared.surface.worldPos + vec3(worldUBO.cameraPos.xyz)) / 16.0))));
+                 traceSecondary(mainRay, startBounce, isHand,
+ #    if SHARC_QUERY && USE_SHARC
+                                sharcParameters, sharcDebugBounceCount, sharcDebugCacheHit,
+-- 
+2.55.0
+
