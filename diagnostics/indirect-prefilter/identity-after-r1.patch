@@ -1,0 +1,12 @@
+diff --git a/src/shader/world/ray_tracing/internal/advanced/indirect_prefilter.comp b/src/shader/world/ray_tracing/internal/advanced/indirect_prefilter.comp
+--- a/src/shader/world/ray_tracing/internal/advanced/indirect_prefilter.comp
++++ b/src/shader/world/ray_tracing/internal/advanced/indirect_prefilter.comp
+@@ -45,7 +45,7 @@
+     IndirectFilterSample center = loadIndirectFilterSample(pixel);
+     if (!center.valid) { return; }
+     vec4 hdr = imageLoad(outputImage, pixel);
+-    vec3 reconstructed = reconstructIndirect(pixel, resolution, center);
++    vec3 reconstructed = center.radiance;
+     vec3 composed = composeReconstructedIndirect(hdr.rgb, center.radiance, reconstructed, transmission.rgb);
+     if (indirectFilterFinite(composed) && all(lessThanEqual(composed, vec3(65504.0)))) {
+         imageStore(outputImage, pixel, vec4(max(composed, vec3(0.0)), hdr.a));

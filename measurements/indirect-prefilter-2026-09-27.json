@@ -1,0 +1,219 @@
+{
+  "date": "2026-09-27",
+  "selected": false,
+  "normal_play_jar_sha256": "e54e3c58c21c1539f777c6cbb6582bd342549a8c16ba44f98d9760973da7f0a0",
+  "protocol": {
+    "output": [
+      2560,
+      1440
+    ],
+    "ray_input": [
+      1334,
+      750
+    ],
+    "cap": 144,
+    "exposure": 2.0,
+    "auto_exposure": false,
+    "turns_per_variant": 6,
+    "recording_hz": 60,
+    "light_candidates": 48,
+    "temporal_cap": 8,
+    "direct_strength": 32,
+    "indirect_strength": 8,
+    "bounces": 4,
+    "sharc_update_factor": 5,
+    "dlss": "310.9.1/F"
+  },
+  "result": "All active spatial filters produce persistent bright speckles in the cave. Rejected; no installation.",
+  "metric_caution": "Raw convergence.json values for r1/r2/noalbedo/surface are invalid: flicker crosses the motion threshold, delaying the detected turn end into the next-turn reference window. No numerical convergence claim is made for these variants.",
+  "invariants": {
+    "radii": [
+      0,
+      1,
+      2
+    ],
+    "checks_per_radius": 12,
+    "all_passed": true,
+    "khronos_and_sync_validation": true,
+    "limitation": "Synthetic helper tests do not validate real scene statistics or DLSS reconstruction quality."
+  },
+  "variants": [
+    {
+      "name": "r0",
+      "jar_sha256": "cae9ff8c26d2be77e56e33dbc8961c784698863deb0903f266633f53a3e47ffc",
+      "outcome": "no new speckles",
+      "last_1000_capped_settled_gpu_mean_ms": {
+        "rt.sharc": 0.1374463,
+        "rt.pass.final_compose": 1.2698883,
+        "rt.pass.indirect_prefilter": 0.0102577
+      },
+      "validation_layer_enabled": false,
+      "settled_stone_crop": {
+        "bounds": [
+          1600,
+          60,
+          2540,
+          780
+        ],
+        "pixels": 676800,
+        "gray_over_180": 0,
+        "meaning": "Scene-specific regression indicator, not a general quality metric."
+      }
+    },
+    {
+      "name": "r1",
+      "jar_sha256": "69f64cf8827611f6753f4df7c582a667a61a9a0a1b4de50b75b6029d9834fbf3",
+      "outcome": "persistent bright speckles",
+      "last_1000_capped_settled_gpu_mean_ms": {
+        "rt.sharc": 0.1382374,
+        "rt.pass.final_compose": 1.2397467,
+        "rt.pass.indirect_prefilter": 0.025171
+      },
+      "validation_layer_enabled": false,
+      "settled_stone_crop": {
+        "bounds": [
+          1600,
+          60,
+          2540,
+          780
+        ],
+        "pixels": 676800,
+        "gray_over_180": 74,
+        "meaning": "Scene-specific regression indicator, not a general quality metric."
+      }
+    },
+    {
+      "name": "r2",
+      "jar_sha256": "5594c3fc74a2e6adee7b79cf042b4eadf301da5683a590deacec60b47e9ea2cd",
+      "outcome": "persistent bright speckles",
+      "last_1000_capped_settled_gpu_mean_ms": {
+        "rt.sharc": 0.1372481,
+        "rt.pass.final_compose": 1.2427414,
+        "rt.pass.indirect_prefilter": 0.0468434
+      },
+      "validation_layer_enabled": false,
+      "settled_stone_crop": {
+        "bounds": [
+          1600,
+          60,
+          2540,
+          780
+        ],
+        "pixels": 676800,
+        "gray_over_180": 5,
+        "meaning": "Scene-specific regression indicator, not a general quality metric."
+      }
+    },
+    {
+      "name": "identity",
+      "jar_sha256": "7366814cd3a594a0feaca9e430fa7cf057a11080ff02268ff81872e88b69ecc5",
+      "outcome": "no new speckles",
+      "last_1000_capped_settled_gpu_mean_ms": {
+        "rt.sharc": 0.1371733,
+        "rt.pass.final_compose": 1.2801652,
+        "rt.pass.indirect_prefilter": 0.0140036
+      },
+      "validation_layer_enabled": true,
+      "settled_stone_crop": {
+        "bounds": [
+          1600,
+          60,
+          2540,
+          780
+        ],
+        "pixels": 676800,
+        "gray_over_180": 0,
+        "meaning": "Scene-specific regression indicator, not a general quality metric."
+      }
+    },
+    {
+      "name": "noalbedo",
+      "jar_sha256": "3d7a2487f1512797d9b9fd874b81d5bdb3e6df099eed8df6602ebdba19766423",
+      "outcome": "persistent bright speckles",
+      "last_1000_capped_settled_gpu_mean_ms": {
+        "rt.sharc": 0.1369072,
+        "rt.pass.final_compose": 1.2322576,
+        "rt.pass.indirect_prefilter": 0.022651
+      },
+      "validation_layer_enabled": false,
+      "settled_stone_crop": {
+        "bounds": [
+          1600,
+          60,
+          2540,
+          780
+        ],
+        "pixels": 676800,
+        "gray_over_180": 74,
+        "meaning": "Scene-specific regression indicator, not a general quality metric."
+      }
+    },
+    {
+      "name": "surface",
+      "jar_sha256": "19e9fe389dd371bf119a3f3fa98f56fd3035f39822150b7f7f21e18b81eb71ce",
+      "outcome": "persistent bright speckles",
+      "last_1000_capped_settled_gpu_mean_ms": {
+        "rt.sharc": 0.1376379,
+        "rt.pass.final_compose": 1.250883,
+        "rt.pass.indirect_prefilter": 0.0251453
+      },
+      "validation_layer_enabled": false,
+      "settled_stone_crop": {
+        "bounds": [
+          1600,
+          60,
+          2540,
+          780
+        ],
+        "pixels": 676800,
+        "gray_over_180": 64,
+        "meaning": "Scene-specific regression indicator, not a general quality metric."
+      }
+    }
+  ],
+  "material_r1": [
+    {
+      "view": "materials-front",
+      "crop_2560x1440": [
+        360,
+        150,
+        2200,
+        1150
+      ],
+      "control_mean": 91.78164456521739,
+      "r1_mean": 91.51728858695652,
+      "delta": -0.2643559782608662
+    },
+    {
+      "view": "materials-oblique",
+      "crop_2560x1440": [
+        360,
+        150,
+        2200,
+        1150
+      ],
+      "control_mean": 99.52695217391305,
+      "r1_mean": 99.43098369565217,
+      "delta": -0.09596847826087185
+    },
+    {
+      "view": "materials-water",
+      "crop_2560x1440": [
+        360,
+        150,
+        2200,
+        1150
+      ],
+      "control_mean": 107.88192554347826,
+      "r1_mean": 107.96810326086957,
+      "delta": 0.0861777173913083
+    }
+  ],
+  "material_validation": {
+    "khronos_and_sync_validation": true,
+    "fps_cap": 30,
+    "warmup_s": 30,
+    "exposure": 2.0,
+    "limitation": "The quiet material-room views missed the cave regression."
+  }
+}

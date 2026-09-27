@@ -1,0 +1,12 @@
+diff --git a/src/shader/world/ray_tracing/internal/advanced/indirect_prefilter.comp b/src/shader/world/ray_tracing/internal/advanced/indirect_prefilter.comp
+--- a/src/shader/world/ray_tracing/internal/advanced/indirect_prefilter.comp
++++ b/src/shader/world/ray_tracing/internal/advanced/indirect_prefilter.comp
+@@ -22,7 +22,7 @@
+     vec4 normalRoughness = imageLoad(normalRoughnessImage, pixel);
+     vec3 geometricNormal = imageLoad(primarySurfaceCacheImage, ivec3(pixel, 3)).xyz;
+     value.position = imageLoad(primarySurfaceCacheImage, ivec3(pixel, 0)).xyz;
+-    value.albedo = imageLoad(diffuseAlbedoImage, pixel).rgb + imageLoad(specularAlbedoImage, pixel).rgb;
++    value.albedo = vec3(1.0); // Diagnostic: disable demodulation only.
+     value.roughness = normalRoughness.a;
+     value.valid = indirectFilterFinite(raw.rgb) && all(greaterThanEqual(raw.rgb, vec3(0.0))) &&
+         indirectFilterFinite(value.position) && indirectFilterFinite(normalRoughness.xyz) &&

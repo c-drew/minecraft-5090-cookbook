@@ -15,6 +15,7 @@ into the cookbook. Numbers are fps average or 1% low as noted.
 | SHaRC lookups on the first bounce for long paths | +5%, visibly flatter distant terrain (RMSE 3.8% vs 0.8% noise) |
 | Dynamic resolution (render scale follows GPU load) | DLSS Ray Reconstruction spends ~14 ms of CPU on every render size change, so each change is a hitch. A fixed render scale works. |
 | A second graphics queue for BLAS builds | No gain |
+| Spatially filter indirect lighting before DLSS RR | 3×3 and 5×5 prototypes add persistent cave speckles. Removing albedo normalization or using displaced parallax geometry does not cure the regression. [Reproduction and limits](../diagnostics/indirect-prefilter/README.md) |
 
 ## CPU and scheduling
 

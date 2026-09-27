@@ -1,0 +1,12 @@
+diff --git a/src/shader/world/ray_tracing/internal/advanced/common/indirect_prefilter.glsl b/src/shader/world/ray_tracing/internal/advanced/common/indirect_prefilter.glsl
+--- a/src/shader/world/ray_tracing/internal/advanced/common/indirect_prefilter.glsl
++++ b/src/shader/world/ray_tracing/internal/advanced/common/indirect_prefilter.glsl
+@@ -2,7 +2,7 @@
+ #define ADV_INDIRECT_PREFILTER_GLSL
+ 
+ #ifndef ADV_INDIRECT_PREFILTER_RADIUS
+-#define ADV_INDIRECT_PREFILTER_RADIUS 1
++#define ADV_INDIRECT_PREFILTER_RADIUS 0
+ #endif
+ 
+ struct IndirectFilterSample {
