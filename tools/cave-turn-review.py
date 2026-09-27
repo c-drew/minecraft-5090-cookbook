@@ -23,6 +23,9 @@ args = parser.parse_args()
 p = args.directory
 if not 0.0 < args.motion_threshold < 255.0:
     parser.error('--motion-threshold must be between 0 and 255')
+launch_log = p / 'latest.log'
+if launch_log.exists() and 'Missing resource minecraft:textures/atlas/blocks.png' in launch_log.read_text(errors='replace'):
+    raise RuntimeError('Invalid cave comparison: the block/item texture atlas failed to load')
 events = json.loads((p / 'turn-events.json').read_text())
 raw = subprocess.check_output([
     'ffmpeg', '-hide_banner', '-loglevel', 'error', '-i', str(p / 'fast-turns.mp4'),

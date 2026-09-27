@@ -18,6 +18,7 @@ into the cookbook. Numbers are fps average or 1% low as noted.
 | Spatially filter indirect lighting before DLSS RR | 3×3 and 5×5 prototypes add persistent cave speckles. Removing albedo normalization or using displaced parallax geometry does not cure the regression. [Reproduction and limits](../diagnostics/indirect-prefilter/README.md) |
 | Earlier secondary cache access after rough primary scattering, on the corrected emission base | Saves about 0.082 ms in final composition in one cave test; no convincing convergence gain, general material/outdoor quality unvalidated. [Isolated probe](../diagnostics/first-secondary-cache/README.md) |
 | Explicit area-light sampling at the first rough secondary wall | Small early settling gain does not repeat in lossless capture; adds about 0.20–0.23 ms to final composition. [Probe and measurement audit](../diagnostics/secondary-area-nee/README.md) |
+| First rough continuation sampled with a spatiotemporal blue-noise mask | No useful cave settling gain in a valid lossless six-turn pair; adds about 0.037 ms to final composition. Exact GPU mask lookup verified. [Private probe](../diagnostics/stbn-continuation/README.md) |
 
 ## CPU and scheduling
 

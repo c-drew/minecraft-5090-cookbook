@@ -1,0 +1,48 @@
+The DisneySampleRandom3 helper is derived from Radiance util/disney.glsl.
+The original notices follow.
+
+/*
+ * MIT License
+ *
+ * Copyright(c) 2019 Asif Ali
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+/* References:
+ * [1] [Physically Based Shading at Disney]
+ * https://media.disneyanimation.com/uploads/production/publication_asset/48/asset/s2012_pbs_disney_brdf_notes_v3.pdf
+ * [2] [Extending the Disney BRDF to a BSDF with Integrated Subsurface Scattering]
+ * https://blog.selfshadow.com/publications/s2015-shading-course/burley/s2015_pbs_disney_bsdf_notes.pdf [3] [The Disney
+ * BRDF Explorer] https://github.com/wdas/brdf/blob/main/src/brdfs/disney.brdf [4] [Miles Macklin's implementation]
+ * https://github.com/mmacklin/tinsel/blob/master/src/disney.h [5] [Simon Kallweit's project report]
+ * http://simon-kallweit.me/rendercompo2015/report/ [6] [Microfacet Models for Refraction through Rough Surfaces]
+ * https://www.cs.cornell.edu/~srm/publications/EGSR07-btdf.pdf [7] [Sampling the GGX Distribution of Visible Normals]
+ * https://jcgt.org/published/0007/04/01/paper.pdf [8] [Pixar's Foundation for Materials]
+ * https://graphics.pixar.com/library/PxrMaterialsCourse2017/paper.pdf [9] [Mitsuba 3]
+ * https://github.com/mitsuba-renderer/mitsuba3
+ */
+
+/*
+ * Modifications:
+ * - Copyright (c) 2026 Radiance
+ * - Changes: Applied to LabPBR materials
+ *
+ * Note: Original license notice and permission notice are retained per MIT License.
+ */
